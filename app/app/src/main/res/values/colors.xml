@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- TradeLens brand palette. The same values are used by core/theme/Color.kt. -->
+    <color name="brand_background">#050B1F</color>
+    <color name="brand_surface">#0B1630</color>
+    <color name="brand_cyan">#00E5FF</color>
+    <color name="brand_buy_green">#22C55E</color>
+    <color name="brand_sell_red">#EF4444</color>
+    <color name="brand_text">#FFFFFF</color>
+    <color name="brand_text_secondary">#9CA3AF</color>
+
+    <!-- Adaptive launcher icon background (dark navy). -->
+    <color name="ic_launcher_background">#050B1F</color>
+</resources>

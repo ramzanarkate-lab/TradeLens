@@ -1,0 +1,25 @@
+[Unit]
+Description=TradeLens server
+After=network-online.target
+Wants=network-online.target
+# Keep retrying forever instead of giving up after a few quick failures.
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=tradelens
+Group=tradelens
+WorkingDirectory=/opt/tradelens/server
+Environment=NODE_ENV=production
+# Secrets are read from /opt/tradelens/server/.env by the server itself (mode 600, owner tradelens).
+ExecStart=/usr/bin/node dist/index.js
+Restart=always
+RestartSec=5
+StandardOutput=append:/opt/tradelens/logs/server.log
+StandardError=append:/opt/tradelens/logs/server.log
+NoNewPrivileges=true
+# A memory leak must never freeze the VM: systemd kills the service at 600 MB and Restart=always brings it back.
+MemoryMax=600M
+
+[Install]
+WantedBy=multi-user.target

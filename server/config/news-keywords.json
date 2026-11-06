@@ -1,0 +1,5 @@
+{
+  "bullish": ["approval", "approved", "adoption", "ETF inflow", "upgrade", "partnership", "record high", "surge", "surged", "rally", "rallied", "launch", "integration"],
+  "bearish": ["hack", "exploit", "lawsuit", "ban", "crackdown", "outflow", "delist", "sell-off", "plunge", "plunged", "bankruptcy", "liquidation", "SEC sues", "fraud"],
+  "negations": ["not", "no", "fails to"]
+}

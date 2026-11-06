@@ -1,0 +1,4 @@
+# Sends https://<DOMAIN> to the server container (WebSocket at /ws works too).
+{$DOMAIN} {
+	reverse_proxy server:4000
+}

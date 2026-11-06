@@ -1,0 +1,7 @@
+{
+  "feeds": [
+    { "name": "CoinDesk", "url": "https://www.coindesk.com/arc/outboundfeeds/rss/" },
+    { "name": "Cointelegraph", "url": "https://cointelegraph.com/rss" },
+    { "name": "The Block", "url": "https://www.theblock.co/rss.xml" }
+  ]
+}

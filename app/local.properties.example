@@ -1,0 +1,14 @@
+# Copy this file to local.properties (it is git-ignored, never commit it) and fill in your own values.
+
+# Android SDK location (Android Studio and scripts/preview-android.sh create this line for you)
+sdk.dir=C\:\Users\YOU\AppData\Local\Android\Sdk
+
+# Release signing (optional). Without these, the release APK is built unsigned.
+# Create a keystore once:  keytool -genkeypair -v -keystore tradelens-release.jks -alias tradelens -keyalg RSA -keysize 2048 -validity 10000
+tradelens.keystore.path=../keys/tradelens-release.jks
+tradelens.keystore.password=CHANGE_ME
+tradelens.key.alias=tradelens
+tradelens.key.password=CHANGE_ME
+
+# Server the app talks to (optional; default http://10.0.2.2:4000, the emulator's alias for your PC)
+SERVER_URL=http://YOUR_VM_IP:4000

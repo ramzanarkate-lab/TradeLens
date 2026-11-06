@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Adaptive icon foreground: the emblem only (never the wordmark), kept inside the safe zone.
+  The icon canvas is 108dp; only the centre ~66dp circle is guaranteed to be visible.
+  The emblem is 60dp wide (aspect 760:527 -> about 41.6dp tall), centred, so it is never cut off.
+-->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/tradelens_emblem"
+    android:insetLeft="24dp"
+    android:insetRight="24dp"
+    android:insetTop="33dp"
+    android:insetBottom="33dp" />

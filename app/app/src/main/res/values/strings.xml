@@ -1,0 +1,238 @@
+<resources>
+    <string name="app_name">TradeLens</string>
+    <string name="app_starting">Starting live feed...</string>
+
+    <string name="nav_dashboard">Dashboard</string>
+    <string name="nav_chart">Chart</string>
+    <string name="nav_signals">Signals</string>
+    <string name="nav_settings">Settings</string>
+
+    <string name="placeholder_dashboard">Market overview will appear here.</string>
+    <string name="placeholder_chart">Chart for %1$s will appear here.</string>
+    <string name="placeholder_signals">Trading signals will appear here.</string>
+    <string name="placeholder_settings">Settings will appear here.</string>
+
+    <string name="toggle_pivots">Pivots</string>
+    <string name="toggle_volume">Volume</string>
+    <string name="toggle_ema20">EMA 20</string>
+    <string name="toggle_ema50">EMA 50</string>
+
+    <string name="status_live">Live</string>
+    <string name="status_reconnecting">Reconnecting</string>
+    <string name="status_offline">Offline</string>
+
+    <string name="action_retry">Retry</string>
+    <string name="error_title">Something went wrong</string>
+    <string name="error_network">Cannot reach the server. Check your connection.</string>
+    <string name="error_server">Server error (%1$d).</string>
+    <string name="error_unknown">Unexpected error.</string>
+    <string name="empty_title">Nothing here yet</string>
+    <string name="empty_message">Data will show up once it is available.</string>
+    <string name="server_url_label">Server: %1$s</string>
+
+    <string name="ok">OK</string>
+    <string name="save">Save</string>
+    <string name="reset_defaults">Reset to defaults</string>
+    <string name="never">Never</string>
+
+    <string name="section_account">Account</string>
+    <string name="section_appearance">Appearance</string>
+    <string name="section_charts">Charts</string>
+    <string name="section_strategy">Signal strategy</string>
+    <string name="section_alerts">Alerts</string>
+    <string name="section_server">Server</string>
+    <string name="section_admin">Admin: secrets</string>
+    <string name="section_about">About</string>
+
+    <string name="account_guest_name">Guest</string>
+    <string name="account_guest_hint">Sign in to edit the signal strategy and sync settings across devices.</string>
+    <string name="role_guest">Guest</string>
+    <string name="role_user">User</string>
+    <string name="role_pro">Pro</string>
+    <string name="role_admin">Admin</string>
+    <string name="sign_in_google">Sign in with Google</string>
+    <string name="sign_in_test_user">Sign in as test user (debug)</string>
+    <string name="sign_in_test_admin">Sign in as test admin (debug)</string>
+    <string name="sign_in_short">Sign in</string>
+    <string name="continue_as_guest">Continue as guest</string>
+    <string name="brand_tagline">Live market signals</string>
+    <string name="account_user_id">User ID: %1$s</string>
+    <string name="lock_sign_in">Sign in to unlock</string>
+    <string name="lock_upgrade_pro">Upgrade to Pro</string>
+    <string name="lock_signals_guest">Guests can see the last 5 signals. Sign in to see the full list.</string>
+    <string name="lock_signals_user">The list shows your latest 50 signals. Pro includes the full signal history.</string>
+    <string name="sign_out">Sign out</string>
+    <string name="signed_in_as">Signed in as %1$s</string>
+    <string name="signed_out">Signed out</string>
+    <string name="session_expired">Your session expired. Please sign in again.</string>
+    <string name="google_not_configured">Google sign-in is not configured in this build (googleWebClientId is empty).</string>
+    <string name="google_failed">Google sign-in failed. Please try again.</string>
+
+    <string name="theme_label">Theme</string>
+    <string name="theme_dark">Dark</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_system">System</string>
+
+    <string name="default_symbol">Default symbol</string>
+    <string name="default_timeframe">Default timeframe</string>
+    <string name="show_ema">Show EMA</string>
+
+    <string name="strategy_signin_required">Sign in to view and change the signal strategy.</string>
+    <string name="strategy_ema_fast">EMA fast</string>
+    <string name="strategy_ema_slow">EMA slow</string>
+    <string name="strategy_rsi_period">RSI period</string>
+    <string name="strategy_rsi_buy_min">RSI buy min</string>
+    <string name="strategy_rsi_buy_max">RSI buy max</string>
+    <string name="strategy_rsi_sell">RSI sell above</string>
+    <string name="strategy_cooldown">Cooldown (minutes)</string>
+    <string name="strategy_saved">Strategy saved. The server is using the new values.</string>
+    <string name="error_range">Enter a whole number from %1$d to %2$d</string>
+    <string name="error_fast_below_slow">EMA fast must be less than EMA slow</string>
+    <string name="error_buy_min_below_max">RSI buy min must be less than RSI buy max</string>
+
+    <string name="alert_sound">Sound</string>
+    <string name="alert_vibration">Vibration</string>
+    <string name="alert_popup">Pop-up</string>
+    <string name="alert_background">Background alerts</string>
+    <string name="test_alert">Test alert</string>
+    <string name="test_alert_title">Test alert</string>
+    <string name="test_alert_message">This is how a TradeLens alert will look.</string>
+
+    <string name="server_url_field">Server URL</string>
+    <string name="url_must_start">The URL must start with http:// or https://</string>
+    <string name="url_no_trailing_slash">The URL must not end with a slash</string>
+    <string name="connection_ok_live">Connected. Live prices: %1$s. Provider: %2$s.</string>
+    <string name="answer_yes">yes</string>
+    <string name="answer_no">no</string>
+    <string name="prices_unavailable_title">Live prices unavailable</string>
+    <string name="prices_unavailable_default">Market data is not available from the server right now.</string>
+    <string name="check_server">Check server</string>
+    <string name="server_active_provider">Active market provider: %1$s</string>
+    <string name="server_live_prices">Live prices: %1$s</string>
+    <string name="market_provider_label">Market provider</string>
+    <string name="market_provider_switched">Market provider is now %1$s</string>
+    <string name="reset_server">Reset to default server</string>
+    <string name="server_reset_done">Using the built-in server address</string>
+    <string name="test_connection">Test connection</string>
+    <string name="connection_testing">Testing…</string>
+    <string name="connection_ok">Connected (%1$d ms)</string>
+    <string name="connection_failed">Could not connect: %1$s</string>
+    <string name="url_invalid">Enter a full URL starting with http:// or https://</string>
+    <string name="server_url_saved">Server URL saved</string>
+    <string name="last_sync">Last sync: %1$s</string>
+    <string name="sync_now">Sync now</string>
+
+    <string name="admin_secrets_hint">Secrets are write-only. The server never sends them back, and this app does not keep them.</string>
+    <string name="secret_set">Set</string>
+    <string name="secret_not_set">Not set</string>
+    <string name="secret_new_value">New value</string>
+    <string name="secret_binance_key">Binance API key</string>
+    <string name="secret_binance_secret">Binance API secret</string>
+    <string name="secret_telegram_token">Telegram bot token</string>
+    <string name="secret_telegram_channel">Telegram channel ID</string>
+    <string name="save_secrets">Save secrets</string>
+    <string name="secrets_saved">Secrets saved</string>
+    <string name="secrets_nothing_to_save">Type at least one value to save.</string>
+
+    <string name="section_telegram">Telegram</string>
+    <string name="telegram_channel_active">Telegram channel: Active</string>
+    <string name="telegram_channel_not_configured">Telegram channel: Not configured</string>
+    <string name="telegram_join">Join our channel</string>
+    <string name="telegram_admin_title">Telegram channel posting</string>
+    <string name="telegram_post_signals">Post signals to Telegram</string>
+    <string name="telegram_bot_token">Bot token</string>
+    <string name="telegram_channel_id">Channel ID</string>
+    <string name="telegram_save">Save Telegram settings</string>
+    <string name="telegram_send_test">Send test message</string>
+    <string name="telegram_saved">Telegram settings saved</string>
+    <string name="telegram_test_ok">Test message sent</string>
+    <string name="telegram_test_failed">Test message failed: %1$s</string>
+    <string name="telegram_last_post">Last post: %1$s</string>
+    <string name="telegram_posts_24h">Posts in the last 24 hours: %1$d</string>
+    <string name="telegram_failed_posts">Failed posts: %1$d</string>
+
+    <string name="dashboard_greeting">Hi, %1$s</string>
+    <string name="dashboard_guest">Guest</string>
+    <string name="server_health_checking">Checking server…</string>
+    <string name="server_health_ok">Server OK · %1$d ms</string>
+    <string name="server_health_down">Server unreachable</string>
+    <string name="summary_signals_today">Signals today</string>
+    <string name="summary_buy">BUY</string>
+    <string name="summary_sell">SELL</string>
+    <string name="summary_updated">Updated</string>
+    <string name="trend_bullish">Bullish</string>
+    <string name="trend_bearish">Bearish</string>
+    <string name="trend_neutral">Neutral</string>
+    <string name="next_resistance">Next resistance %1$s: %2$s</string>
+    <string name="next_support">Next support %1$s: %2$s</string>
+    <string name="last_signal">Last signal: %1$s at %2$s · %3$s</string>
+    <string name="no_signal_yet">No signal yet</string>
+    <string name="recent_signals">Recent signals</string>
+    <string name="no_signals_yet">No signals yet</string>
+    <string name="status_open">Open</string>
+    <string name="status_tp1">TP1 hit</string>
+    <string name="status_tp2">TP2 hit</string>
+    <string name="status_tp3">TP3 hit</string>
+    <string name="status_sl">Stop hit</string>
+    <string name="status_breakeven">Breakeven</string>
+    <string name="status_time">Time exit</string>
+    <string name="signal_score_short">Score %1$d</string>
+    <string name="label_entry">Entry</string>
+    <string name="label_sl">SL</string>
+    <string name="stat_win_rate">Win rate</string>
+    <string name="stat_avg_r">Average R</string>
+    <string name="stat_profit_factor">Profit factor</string>
+    <string name="stat_open">Open</string>
+    <string name="stat_total">Total</string>
+    <string name="filter_symbol">Symbol</string>
+    <string name="filter_side">Side</string>
+    <string name="filter_status">Status</string>
+    <string name="filter_range">Date</string>
+    <string name="filter_all">All</string>
+    <string name="range_any">Any time</string>
+    <string name="range_24h">Last 24 hours</string>
+    <string name="range_7d">Last 7 days</string>
+    <string name="range_30d">Last 30 days</string>
+    <string name="lock_full_history">Sign in to see full history</string>
+    <string name="load_more">Loading more…</string>
+    <string name="no_signals_filtered">No signals match these filters.</string>
+    <string name="detail_score">Score %1$d / 100</string>
+    <string name="detail_result">Result: %1$s</string>
+    <string name="detail_risk">risk %1$s%%</string>
+    <string name="detail_rr">%1$sR</string>
+    <string name="detail_reasons">Why this signal fired</string>
+    <string name="detail_history">Status history</string>
+    <string name="mode_paper">Paper</string>
+    <string name="mode_live">Live</string>
+    <string name="signals_filtered_banner">Showing one signal</string>
+    <string name="show_all_signals">Show all</string>
+    <string name="signal_not_found">That signal could not be found.</string>
+
+    <string name="channel_trade_signals">Trade Signals</string>
+    <string name="channel_trade_signals_description">Alerts when TradeLens finds a BUY or SELL signal.</string>
+    <string name="channel_watching">Market watching</string>
+    <string name="channel_watching_description">Shown while TradeLens watches the market in the background.</string>
+    <string name="watching_notification_title">TradeLens is watching the market</string>
+
+    <string name="notif_permission_title">Allow notifications?</string>
+    <string name="notif_permission_message">TradeLens can notify you when a new BUY or SELL signal appears, even when the app is closed. Without notifications you will only see signals while the app is open.</string>
+    <string name="notif_allow">Allow</string>
+    <string name="notif_not_now">Not now</string>
+    <string name="notif_status_allowed">Notifications are on</string>
+    <string name="notif_status_off">Notifications are off</string>
+    <string name="notif_enable">Allow notifications</string>
+    <string name="notif_open_settings">Notification settings</string>
+
+    <string name="battery_title">Battery optimization may stop background alerts</string>
+    <string name="battery_message">Your phone may pause TradeLens to save battery, so signals could arrive late or not at all while the app is closed. Set TradeLens to \"Not optimized\" (or \"Unrestricted\").</string>
+    <string name="battery_open">Open battery settings</string>
+
+    <string name="alert_popup_view_chart">View chart</string>
+    <string name="alert_popup_dismiss">Dismiss</string>
+    <string name="alert_test_chip">TEST</string>
+    <string name="test_alert_reason">Test alert: this is a sample BUY signal. No real signal was generated.</string>
+
+    <string name="about_version">Version %1$s</string>
+    <string name="about_disclaimer">Signals are informational only and are not financial advice.</string>
+    <string name="about_privacy">Privacy policy</string>
+</resources>

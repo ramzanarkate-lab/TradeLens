@@ -1,0 +1,11 @@
+{
+  "editor.formatOnSave": true,
+  // Android SDK path placeholder: set to your SDK location if ANDROID_HOME is not defined,
+  // e.g. "C:\Users\<you>\AppData\Local\Android\Sdk" or "/home/<you>/Android/Sdk"
+  "terminal.integrated.env.windows": { "ANDROID_HOME": "${env:ANDROID_HOME}" },
+  "files.eol": "\n",
+  "terminal.integrated.defaultProfile.windows": "Git Bash",
+  "terminal.integrated.profiles.windows": {
+    "Git Bash": { "path": "C:\\Program Files\\Git\\bin\\bash.exe", "args": ["--login", "-i"] }
+  }
+}

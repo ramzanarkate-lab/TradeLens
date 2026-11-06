@@ -1,0 +1,36 @@
+# Always-on TradeLens server: the API plus Caddy, which gets a free HTTPS certificate automatically.
+# Both containers restart by themselves after a crash or a reboot of the machine.
+services:
+  server:
+    build: ../server
+    restart: unless-stopped
+    env_file: ./.env          # copy .env.production.example to .env here and fill it in (never commit it)
+    environment:
+      ENV_FILE: /app/data/runtime.env   # where "save secrets" from the app writes
+    volumes:
+      - tradelens-data:/app/data
+    ports:
+      - "4000:4000"          # direct access for testing: curl -i http://<PUBLIC_IP>:4000/health
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - server
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+
+volumes:
+  tradelens-data:
+  caddy-data:

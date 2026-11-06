@@ -1,0 +1,49 @@
+{
+  "name": "tradelens-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "lint": "eslint .",
+    "seed": "tsx scripts/seed.ts",
+    "check:market": "tsx scripts/check-market.ts",
+    "backtest": "tsx scripts/backtest.ts",
+    "news:fetch": "tsx scripts/news-fetch.ts"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "express-rate-limit": "^8.7.3",
+    "google-auth-library": "^11.3.3",
+    "helmet": "^8.3.0",
+    "jsonwebtoken": "^9.0.3",
+    "pino": "^10.4.0",
+    "ws": "^8.22.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^20.17.0",
+    "@types/supertest": "^7.2.1",
+    "@types/ws": "^8.18.2",
+    "eslint": "^9.39.5",
+    "globals": "^17.14.0",
+    "pino-pretty": "^13.2.0",
+    "supertest": "^7.3.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "typescript-eslint": "^8.72.1",
+    "vitest": "^2.1.8"
+  }
+}
