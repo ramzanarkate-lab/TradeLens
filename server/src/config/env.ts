@@ -54,12 +54,21 @@ const envSchema = z
     DEMO_MODE: z.preprocess(emptyToUndefined, z.enum(["true", "false"]).default("false")).transform((v) => v === "true"),
     /** File that PUT /api/settings/secrets writes to (default: .env in the working directory). */
     ENV_FILE: optionalString,
+    /** Where documents are kept. file = the DATA_DIR folder (development). supabase = Supabase table kv_store (Render). */
+    STORAGE: z.preprocess(emptyToUndefined, z.enum(["file", "supabase"]).default("file")),
+    SUPABASE_URL: z.preprocess(emptyToUndefined, z.url().optional()),
+    SUPABASE_SERVICE_KEY: optionalString,
     DATA_DIR: z.preprocess(emptyToUndefined, z.string().default("data")),
     LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === "production" && !env.JWT_SECRET) {
       ctx.addIssue({ code: "custom", path: ["JWT_SECRET"], message: "JWT_SECRET is required in production" });
+    }
+    if (env.STORAGE === "supabase") {
+      for (const name of ["SUPABASE_URL", "SUPABASE_SERVICE_KEY"] as const) {
+        if (!env[name]) ctx.addIssue({ code: "custom", path: [name], message: `${name} is required when STORAGE=supabase` });
+      }
     }
     if (env.JWT_SECRET && env.JWT_SECRET.length < 16) {
       ctx.addIssue({ code: "custom", path: ["JWT_SECRET"], message: "JWT_SECRET must be at least 16 characters" });

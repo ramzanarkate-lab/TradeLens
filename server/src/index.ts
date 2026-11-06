@@ -33,6 +33,7 @@ import { loadFeeds, NewsFetcher } from "./news/sources.js";
 import { installProcessGuards } from "./runner/processGuards.js";
 import { SignalRunner } from "./runner/signalRunner.js";
 import { Watchdog } from "./runner/watchdog.js";
+import { createStore, FileMirror, STORED_DOCUMENTS, STORED_FOLDERS } from "./storage/index.js";
 import { WsHub } from "./ws/hub.js";
 
 // Values saved from the app (PUT /api/settings/secrets) live in ENV_FILE; load them so they survive a restart.
@@ -50,6 +51,20 @@ const logger = createLogger({ level: env.LOG_LEVEL, pretty: env.NODE_ENV === "de
 // Never let one stray error take the 24/7 server down: log it and keep running.
 installProcessGuards(logger);
 const hub = new WsHub({ logger });
+
+// Storage: with STORAGE=supabase the data folder is restored from Supabase before anything reads it, and kept in sync.
+const store = createStore(env);
+const mirror =
+  store.kind === "supabase" ? new FileMirror({ store, dir: resolve(env.DATA_DIR), keys: STORED_DOCUMENTS, folders: STORED_FOLDERS, logger }) : undefined;
+if (mirror) {
+  try {
+    await mirror.hydrate();
+  } catch (err) {
+    logger.error({ err: err instanceof Error ? err.message : String(err) }, "cannot read from Supabase storage: refusing to start with an empty data folder");
+    process.exit(1);
+  }
+  mirror.start();
+}
 
 // Demo mode: sample data from `npm run seed`, no live feed, no network calls to the provider.
 const demoDir = resolve(env.DATA_DIR, "demo");
@@ -232,6 +247,7 @@ const app = createApp({
     lastCandleTime: runner?.lastCandleTimes() ?? {},
     lastSignalTime: runner?.lastSignalTime() ?? null,
     telegramStatus: telegramState(),
+    storage: store.kind,
     newsStatus: newsService ? newsService.healthStatus(newsSettings().enabled) : "off",
   }),
   news: newsService && newsFetcher ? { service: newsService, feeds: () => newsFetcher.feedStatus(), settings: () => ({ enabled: newsSettings().enabled, windowMinutes: newsSettings().windowMinutes }) } : undefined,
@@ -304,6 +320,7 @@ async function shutdown(signal: string): Promise<void> {
   telegramPoster.stop();
   await hub.close();
   await Promise.all([signalStore.flush(), settingsStore.flush(), userStore.flush()]);
+  await mirror?.flush();
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 3000).unref();
 }

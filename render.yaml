@@ -1,0 +1,45 @@
+# Render blueprint for the TradeLens server (free plan).
+# Secret values are NOT in this file: enter them in the Render dashboard (Environment tab).
+services:
+  - type: web
+    name: tradelens-server
+    runtime: node
+    rootDir: server
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: NODE_ENV
+        value: production
+      - key: STORAGE
+        value: supabase
+      - key: MARKET_PROVIDER
+        value: auto
+      - key: MARKET_STREAM
+        value: poll
+      - key: TELEGRAM_ENABLED
+        value: "false"
+      - key: TELEGRAM_TIMEZONE
+        value: Asia/Riyadh
+      - key: LOG_LEVEL
+        value: info
+      # Secrets: values are entered in the Render dashboard only.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: GOOGLE_WEB_CLIENT_ID
+        sync: false
+      - key: ADMIN_EMAILS
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHANNEL_ID
+        sync: false
+      - key: TELEGRAM_CHANNEL_LINK
+        sync: false
