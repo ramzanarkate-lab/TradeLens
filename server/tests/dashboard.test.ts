@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 import type { PivotsResult } from "../src/analysis/pivots.js";
@@ -105,6 +108,28 @@ describe("DashboardService", () => {
     expect(btc!.lastSignal?.id).toBe(signals[0]!.id);
     expect(sol!.lastSignal?.side).toBe("SELL");
     expect(eth!.lastSignal).toBeNull();
+  });
+
+  it("each symbol also carries the newest trade of its saved backtest, for the card when no live signal exists yet", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tl-dash-"));
+    try {
+      writeFileSync(
+        join(dir, "BTCUSDT-2026-11-06.json"),
+        JSON.stringify({
+          verdict: "FAIL",
+          trades: [
+            { createdAt: "2026-09-01T10:00:00.000Z", side: "SELL", entry: 100, sl: 102, exitStatus: "SL_HIT", exitPrice: 102, netR: -1.1 },
+            { createdAt: "2026-10-05T14:00:00.000Z", side: "BUY", score: 80, entry: 200, sl: 190, tp1: 210, tp2: 220, tp3: 230, exitStatus: "TP3_HIT", exitPrice: 230, netR: 2.8 },
+          ],
+        }),
+      );
+      const out = await make(marketFor({ BTCUSDT: { series: rising }, SOLUSDT: { series: rising }, ETHUSDT: { series: rising } }), { backtestDir: dir }).get();
+      const [btc, sol] = out.symbols;
+      expect(btc!.lastBacktest).toMatchObject({ createdAt: "2026-10-05T14:00:00.000Z", side: "BUY", entry: 200, sl: 190, tp1: 210, tp3: 230, exitStatus: "TP3_HIT", exitPrice: 230, netR: 2.8 });
+      expect(sol!.lastBacktest).toBeNull(); // no report for SOL
+    } finally {
+      rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+    }
   });
 
   it("sparkline is the closes of the last 24 closed 1h candles, ignoring the forming candle", async () => {

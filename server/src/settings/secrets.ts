@@ -6,7 +6,7 @@ import { parseEnv, type Env } from "../config/env.js";
 export const SECRET_KEYS = ["BINANCE_API_KEY", "BINANCE_API_SECRET", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHANNEL_ID"] as const;
 export type SecretKey = (typeof SECRET_KEYS)[number];
 /** Plain (non-secret) values the same endpoint can write. They are not reported by status(); GET /api/telegram/status reports them. */
-export const TELEGRAM_SETTING_KEYS = ["TELEGRAM_ENABLED", "TELEGRAM_CHANNEL_LINK", "MARKET_PROVIDER"] as const;
+export const TELEGRAM_SETTING_KEYS = ["TELEGRAM_ENABLED", "TELEGRAM_POST_DEMO", "TELEGRAM_CHANNEL_LINK", "MARKET_PROVIDER"] as const;
 const WRITABLE_KEYS = [...SECRET_KEYS, ...TELEGRAM_SETTING_KEYS] as const;
 
 /** Empty string clears the secret. Otherwise length and characters are checked per key. */
@@ -19,6 +19,7 @@ export const secretsBodySchema = z
     TELEGRAM_BOT_TOKEN: optionalValue(z.string().regex(/^\d{6,12}:[A-Za-z0-9_-]{30,50}$/, "must look like 123456789:AA... (bot id, colon, 30-50 token characters)")),
     TELEGRAM_CHANNEL_ID: optionalValue(z.string().regex(/^(@[A-Za-z][A-Za-z0-9_]{4,31}|-?\d{5,20})$/, "must be @channelname or a numeric chat id")),
     TELEGRAM_ENABLED: z.enum(["true", "false"]),
+    TELEGRAM_POST_DEMO: z.enum(["true", "false"]),
     MARKET_PROVIDER: z.enum(["auto", "binance", "bybit", "okx", "kraken"]),
     TELEGRAM_CHANNEL_LINK: optionalValue(z.string().regex(/^https:\/\/[A-Za-z0-9./_+~=-]{3,100}$/, "must be an https:// link")),
   })

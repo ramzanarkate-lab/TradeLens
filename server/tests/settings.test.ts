@@ -39,12 +39,12 @@ const rejects = (fn: () => unknown, message: RegExp) => {
 describe("defaults", () => {
   it("match the specification", () => {
     expect(fresh().get()).toEqual({
-      signals: { emaFast: 20, emaSlow: 50, rsiPeriod: 14, rsiBuyMin: 40, rsiBuyMax: 65, rsiSellAbove: 75, cooldownMinutes: 60, timeframe: "1h",
-        minScore: 70, minRiskPercent: 0.4, maxRiskPercent: 4.0, timeStopHours: 48, mode: "paper",
+      signals: { emaFast: 20, emaSlow: 50, rsiPeriod: 14, rsiBuyMin: 40, rsiBuyMax: 65, rsiSellAbove: 75, cooldownMinutes: 60, timeframe: "1h", triggerTimeframe: "15m",
+        minScore: 70, minRiskPercent: 0.4, maxRiskPercent: 4.0, stopBufferAtr: 0.5, timeStopHours: 48, mode: "paper",
         backtestMinProfitFactor: 1.3, backtestMinTrades: 30, backtestMaxDrawdownR: 10,
         reversalEnabled: true, reversalMinVolumeRatio: 1.2, reversalLevelToleranceAtr: 0.5,
         reversalPatterns: { hammer: true, engulfing: true, piercing: true, morningStar: true, tweezer: true },
-        newsEnabled: true, newsWindowMinutes: 60, newsBoostPoints: 5, newsVetoEnabled: true,
+        telegramPostPaper: true, newsEnabled: true, newsWindowMinutes: 60, newsBoostPoints: 5, newsVetoEnabled: true,
       },
       symbols: { enabled: ["BTCUSDT", "SOLUSDT", "ETHUSDT"] },
       chart: { defaultSymbol: "BTCUSDT", defaultTimeframe: "1h", showPivots: true, showVolume: true, showEma: true },

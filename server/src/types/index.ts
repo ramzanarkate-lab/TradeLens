@@ -2,8 +2,8 @@ import type { Symbol, Timeframe } from "../config/symbols.js";
 
 export type { Symbol, Timeframe };
 
-/** "pro" is reserved for a future paid tier; nothing assigns it yet. */
-export type Role = "user" | "pro" | "admin";
+/** Every signed-in account is a "user" (everything is free); admins can also change server settings. */
+export type Role = "user" | "admin";
 
 export interface User {
   id: string;
@@ -11,8 +11,6 @@ export interface User {
   name: string;
   /** Computed on every request: admin (ADMIN_USER_IDS) > pro (flag) > user. Guests have no User at all. */
   role: Role;
-  /** True for pro users and for admins (who have everything a pro has). */
-  pro: boolean;
 }
 
 /** One OHLCV candle. `time` is the open time in epoch milliseconds; prices are plain numbers. */
@@ -97,6 +95,8 @@ export interface Signal {
   resultR?: number | null;
   /** Open time of the newest 1H candle the lifecycle tracker has looked at. */
   lastCheckedCandle?: number;
+  /** Hours after which the signal is closed at market if no level was hit (strategy-library signals: 24). Absent = the engine's time stop. */
+  expiryHours?: number;
   /** Set when news headlines boosted this signal: the headlines used, their scores, and the decision. */
   news?: SignalNews;
 }
@@ -120,9 +120,11 @@ export interface Settings {
     rsiSellAbove: number;
     cooldownMinutes: number;
     timeframe: Timeframe;
+    triggerTimeframe: "15m" | "1h" | "4h";
     minScore: number;
     minRiskPercent: number;
     maxRiskPercent: number;
+    stopBufferAtr: number;
     timeStopHours: number;
     mode: SignalMode;
     backtestMinProfitFactor: number;
@@ -132,6 +134,7 @@ export interface Settings {
     reversalMinVolumeRatio: number;
     reversalLevelToleranceAtr: number;
     reversalPatterns: { hammer: boolean; engulfing: boolean; piercing: boolean; morningStar: boolean; tweezer: boolean };
+    telegramPostPaper: boolean;
     newsEnabled: boolean;
     newsWindowMinutes: number;
     newsBoostPoints: number;

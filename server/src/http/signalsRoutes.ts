@@ -3,7 +3,7 @@ import { z } from "zod";
 import { symbolSchema } from "../config/symbols.js";
 import { computeStats } from "../signals/stats.js";
 import type { SignalStore } from "../signals/store.js";
-import type { Role } from "../types/index.js";
+import { requireUser } from "../auth/middleware.js";
 import { AppError } from "./errors.js";
 import { validate } from "./validate.js";
 
@@ -27,48 +27,22 @@ const listQuery = z.object({
 const statsQuery = z.object({ symbol: symbolSchema.optional(), from: when, to: when });
 const idParams = z.object({ id: z.uuid() });
 
-/** How many of the newest signals each kind of visitor may read. Guests: the last 5. Signed-in users: the full history. */
-export const SIGNAL_ACCESS = { guest: 5, user: 1_000_000, pro: 1_000_000, admin: 1_000_000 } as const;
-
-export function signalCapFor(role: Role | undefined): number {
-  return SIGNAL_ACCESS[role ?? "guest"];
-}
-
 export function createSignalsRouter(store: SignalStore): Router {
   const router = Router();
 
-  router.get("/signals", validate({ query: listQuery }), (req, res) => {
+  // Live signals are free, but only for signed-in (Google) accounts. Guests get 401.
+  router.get("/signals", requireUser, validate({ query: listQuery }), (req, res) => {
     const q = req.query as unknown as z.infer<typeof listQuery>;
-    const role = req.user?.role ?? "guest";
-    const cap = signalCapFor(req.user?.role);
-    // A guest gets the newest 5 matching signals and no paging.
-    const limit = Math.min(q.limit, cap);
-    const offset = role === "guest" ? 0 : q.offset;
-    const { signals, total } = store.query({ symbol: q.symbol, side: q.side, status: q.status, from: q.from, to: q.to, limit, offset });
-    res.json({
-      signals,
-      cap, // tells the app how far this account can see, so it can show the right lock message
-      role,
-      total,
-      limit,
-      offset,
-      hasMore: role !== "guest" && offset + signals.length < total,
-      locked: role === "guest" && total > cap,
-    });
+    const { signals, total } = store.query({ symbol: q.symbol, side: q.side, status: q.status, from: q.from, to: q.to, limit: q.limit, offset: q.offset });
+    res.json({ signals, role: req.user!.role, total, limit: q.limit, offset: q.offset, hasMore: q.offset + signals.length < total, locked: false });
   });
 
   // Registered before /signals/:id so "stats" is not read as an id.
-  router.get("/signals/stats", validate({ query: statsQuery }), (req, res) => {
+  router.get("/signals/stats", requireUser, validate({ query: statsQuery }), (req, res) => {
     const q = req.query as unknown as z.infer<typeof statsQuery>;
     const { signals } = store.query({ symbol: q.symbol, from: q.from, to: q.to, limit: Number.MAX_SAFE_INTEGER });
     const stats = computeStats(signals);
-    const full = req.user?.role === "pro" || req.user?.role === "admin";
-    // Everyone sees the win rate and the counts. Pro and admin see the rest.
-    res.json(
-      full
-        ? { tier: "full", ...stats }
-        : { tier: "basic", total: stats.total, open: stats.open, closed: stats.closed, wins: stats.wins, winRate: stats.winRate },
-    );
+    res.json({ tier: "full", ...stats });
   });
 
   router.get("/signals/:id", validate({ params: idParams }), (req, res, next) => {

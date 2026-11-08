@@ -22,7 +22,7 @@ export interface AuthOptions {
   /** Session length. Default 7 days. */
   tokenTtlSeconds?: number;
   verifyGoogle?: GoogleVerifier;
-  /** When given, sign-ins are recorded here and the `pro` flag is read from it on every request. */
+  /** When given, sign-ins are recorded here. */
   users?: UserStore;
 }
 
@@ -35,10 +35,12 @@ interface Claims {
 }
 
 export const SESSION_SECONDS = 7 * 24 * 3600;
+/** A guest has no password to sign in with again, so a guest session lasts a year. */
+export const GUEST_SESSION_SECONDS = 365 * 24 * 3600;
 
 /**
  * Issues and verifies session tokens (HS256 JWT). The role is never stored in the token or on disk:
- * it is computed on every request from ADMIN_USER_IDS and the user's `pro` flag, so changes apply immediately.
+ * it is computed on every request from ADMIN_USER_IDS and the admin lists, so changes apply immediately.
  */
 export class AuthService {
   private readonly ttl: number;
@@ -48,22 +50,21 @@ export class AuthService {
   }
 
   /**
-   * admin (listed in ADMIN_USER_IDS, or a VERIFIED email listed in ADMIN_EMAILS) > pro (flag set by an admin) > user.
+   * admin (listed in ADMIN_USER_IDS, or a VERIFIED email listed in ADMIN_EMAILS) > user.
    * Computed on every request from the signed session and the current environment.
    */
   roleFor(userId: string, email = "", emailVerified = false): Role {
     if (this.opts.adminIds().includes(userId)) return "admin";
     const wanted = email.trim().toLowerCase();
     if (emailVerified && wanted && (this.opts.adminEmails?.() ?? []).some((e) => e.trim().toLowerCase() === wanted)) return "admin";
-    if (this.opts.users?.get(userId)?.pro) return "pro";
     return "user";
   }
 
   /** Records the sign-in (create or update the user) and returns a session token. */
-  issue(profile: GoogleProfile): { token: string; user: User } {
+  issue(profile: GoogleProfile, options: { ttlSeconds?: number } = {}): { token: string; user: User } {
     this.opts.users?.upsertOnLogin(profile);
     const claims: Claims = { sub: profile.id, email: profile.email, name: profile.name, ev: profile.emailVerified === true };
-    const token = jwt.sign(claims, this.opts.secret, { algorithm: "HS256", expiresIn: this.ttl });
+    const token = jwt.sign(claims, this.opts.secret, { algorithm: "HS256", expiresIn: options.ttlSeconds ?? this.ttl });
     return { token, user: this.toUser(claims) };
   }
 
@@ -89,7 +90,7 @@ export class AuthService {
 
   private toUser(c: Claims): User {
     const role = this.roleFor(c.sub, c.email, c.ev === true);
-    return { id: c.sub, email: c.email, name: c.name, role, pro: role === "pro" || role === "admin" || Boolean(this.opts.users?.get(c.sub)?.pro) };
+    return { id: c.sub, email: c.email, name: c.name, role };
   }
 }
 

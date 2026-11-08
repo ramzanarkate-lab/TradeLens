@@ -19,8 +19,8 @@ describe("AuthService", () => {
   it("round-trips a token and derives the role from ADMIN_USER_IDS", () => {
     const auth = makeAuth();
     const { token, user } = auth.issue(profile);
-    expect(user).toEqual({ ...profile, role: "user", pro: false });
-    expect(auth.verify(token)).toEqual({ ...profile, role: "user", pro: false });
+    expect(user).toEqual({ ...profile, role: "user" });
+    expect(auth.verify(token)).toEqual({ ...profile, role: "user" });
 
     const admin = auth.issue({ ...profile, id: "admin-1" });
     expect(auth.verify(admin.token)?.role).toBe("admin");

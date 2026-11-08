@@ -16,5 +16,5 @@ export function createStore(env: Pick<Env, "STORAGE" | "DATA_DIR" | "SUPABASE_UR
 }
 
 /** The documents the server keeps (each one is DATA_DIR/<name>.json). */
-export const STORED_DOCUMENTS = ["settings", "signals", "users", "runner-state", "telegram-sent", "telegram-failed", "news"];
+export const STORED_DOCUMENTS = ["settings", "signals", "users", "runner-state", "demo-accounts", "strategy-signals", "strategy-backtests", "strategy-runner-state", "telegram-events-sent", "telegram-events-failed", "telegram-sent", "telegram-failed", "news"];
 export const STORED_FOLDERS = ["backtests"];

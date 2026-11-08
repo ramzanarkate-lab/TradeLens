@@ -32,7 +32,7 @@ function setup(opts: { candles: () => Candle[]; settings?: Partial<ConstructorPa
     new SignalRunner({
       service: service as never,
       market,
-      settings: new StaticSignalSettings({ enabledSymbols: ["BTCUSDT"], ...opts.settings }),
+      settings: new StaticSignalSettings({ enabledSymbols: ["BTCUSDT"], triggerTimeframe: "1h", ...opts.settings }),
       logger: silent,
       stateFile: join(dir, "runner-state.json"),
     });
@@ -44,14 +44,16 @@ describe("signal runner", () => {
     let candles = [candle(T0 - HOUR, true), candle(T0, false)];
     const { service, make } = setup({ candles: () => candles });
     const runner = make();
-    await runner.tick(); // first run: remembers where it is
-    expect(service.processHour).not.toHaveBeenCalled();
+    await runner.tick(); // the first look after a start: the newest closed candle is evaluated once
+    expect(service.processHour).toHaveBeenCalledTimes(1);
+    await runner.tick();
+    expect(service.processHour).toHaveBeenCalledTimes(1); // the same candle is not evaluated again
 
     candles = [candle(T0, true), candle(T0 + HOUR, false)]; // T0 has now closed
     await runner.tick();
     await runner.tick();
     await runner.tick();
-    expect(service.processHour).toHaveBeenCalledTimes(1);
+    expect(service.processHour).toHaveBeenCalledTimes(2); // one more evaluation for the one new closed candle
     expect(service.processHour).toHaveBeenCalledWith("BTCUSDT", true);
   });
 
@@ -62,7 +64,7 @@ describe("signal runner", () => {
     await runner.tick();
     candles = [candle(T0 - HOUR, true), candle(T0, false)];
     await runner.tick();
-    expect(service.processHour).not.toHaveBeenCalled();
+    expect(service.processHour).toHaveBeenCalledTimes(1); // only the closed candle (T0 - 1h), once; the forming T0 is never evaluated
     expect(runner.lastCandleTimes().BTCUSDT).toBe(new Date(T0 - HOUR).toISOString());
   });
 
@@ -73,27 +75,31 @@ describe("signal runner", () => {
     await r1.tick();
     candles = [candle(T0, true)];
     await r1.tick();
-    expect(first.service.processHour).toHaveBeenCalledTimes(1);
+    expect(first.service.processHour).toHaveBeenCalledTimes(2); // the first look, then the new candle
     expect(JSON.parse(readFileSync(join(dir, "runner-state.json"), "utf8"))).toEqual({ "BTCUSDT:1h": T0 });
 
     const r2 = first.make(); // "restart": a new runner reading the same state file
     await r2.tick();
-    expect(first.service.processHour).toHaveBeenCalledTimes(1);
+    await r2.tick();
+    await r2.tick();
+    // its first look re-checks the newest candle once (the service never makes a second signal from a candle); nothing else repeats
+    expect(first.service.processHour).toHaveBeenCalledTimes(3);
+    expect(JSON.parse(readFileSync(join(dir, "runner-state.json"), "utf8"))).toEqual({ "BTCUSDT:1h": T0 });
   });
 
   it("a failed evaluation (network down) is retried on the next pass, then resumes", async () => {
     let candles = [candle(T0 - HOUR, true)];
     const { service, make } = setup({ candles: () => candles });
     const runner = make();
-    await runner.tick();
+    await runner.tick(); // first look: 1 call
     candles = [candle(T0, true)];
     service.processHour.mockRejectedValueOnce(new Error("network down"));
-    await runner.tick();
+    await runner.tick(); // the new candle: fails
     expect(runner.events().some((e) => e.type === "error" && /network down/.test(e.detail))).toBe(true);
-    await runner.tick();
-    expect(service.processHour).toHaveBeenCalledTimes(2);
-    await runner.tick();
-    expect(service.processHour).toHaveBeenCalledTimes(2);
+    await runner.tick(); // retried and works
+    expect(service.processHour).toHaveBeenCalledTimes(3);
+    await runner.tick(); // done: no more calls
+    expect(service.processHour).toHaveBeenCalledTimes(3);
   });
 
   it("a hung market call times out instead of blocking forever", async () => {
@@ -101,7 +107,7 @@ describe("signal runner", () => {
     const runner = new SignalRunner({
       service: service as never,
       market: { getFreshCandles: () => new Promise<Candle[]>(() => undefined) },
-      settings: new StaticSignalSettings({ enabledSymbols: ["BTCUSDT"] }),
+      settings: new StaticSignalSettings({ enabledSymbols: ["BTCUSDT"], triggerTimeframe: "1h" }),
       logger: silent,
       stateFile: join(dir, "s.json"),
       callTimeoutMs: 20,
@@ -116,13 +122,36 @@ describe("signal runner", () => {
       service: service as never,
       market: { getFreshCandles: async () => [] },
       prices: { getLatest: () => candle(T0, false) },
-      settings: new StaticSignalSettings({ enabledSymbols: ["BTCUSDT"] }),
+      settings: new StaticSignalSettings({ enabledSymbols: ["BTCUSDT"], triggerTimeframe: "1h" }),
       logger: silent,
       stateFile: join(dir, "p.json"),
     });
     runner.priceCheck();
     expect(service.checkPrice).toHaveBeenCalledWith("BTCUSDT", 1.5, expect.any(Number));
     void make;
+  });
+});
+
+describe("signal runner: trigger timeframe", () => {
+  it("asks for candles of the configured trigger timeframe and keeps its state per timeframe", async () => {
+    const asked: string[] = [];
+    const service = { processHour: vi.fn(async () => null as never), checkPrice: vi.fn() };
+    const runner = new SignalRunner({
+      service: service as never,
+      market: {
+        getFreshCandles: async (_s, interval) => {
+          asked.push(interval);
+          return [candle(T0 - 15 * 60_000, true), candle(T0, false)];
+        },
+      },
+      settings: new StaticSignalSettings({ enabledSymbols: ["BTCUSDT"], triggerTimeframe: "15m" }),
+      logger: silent,
+      stateFile: join(dir, "runner-state.json"),
+    });
+    await runner.tick();
+    expect(asked).toEqual(["15m"]);
+    expect(JSON.parse(readFileSync(join(dir, "runner-state.json"), "utf8"))).toEqual({ "BTCUSDT:15m": T0 - 15 * 60_000 });
+    expect(service.processHour).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -146,7 +175,7 @@ describe("watchdog", () => {
     const runner = new SignalRunner({
       service: service as never,
       market: { getFreshCandles: () => new Promise<Candle[]>(() => undefined) }, // stuck forever
-      settings: new StaticSignalSettings({ enabledSymbols: ["BTCUSDT"] }),
+      settings: new StaticSignalSettings({ enabledSymbols: ["BTCUSDT"], triggerTimeframe: "1h" }),
       logger: silent,
       stateFile: join(dir, "w.json"),
       now: () => t,

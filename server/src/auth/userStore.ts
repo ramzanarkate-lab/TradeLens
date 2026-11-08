@@ -8,8 +8,6 @@ export interface UserRecord {
   id: string;
   email: string;
   name: string;
-  /** Paid tier flag, set by an admin. */
-  pro: boolean;
   createdAt: number;
   lastLoginAt: number;
 }
@@ -39,7 +37,10 @@ export class UserStore {
       const parsed: unknown = JSON.parse(readFileSync(this.file, "utf8"));
       if (!Array.isArray(parsed)) throw new Error("file does not contain an array");
       for (const u of parsed as UserRecord[]) {
-        if (typeof u?.id === "string") this.users.set(u.id, { ...u, pro: Boolean(u.pro) });
+        if (typeof u?.id === "string") {
+          const { pro: _legacyPro, ...rest } = u as UserRecord & { pro?: unknown }; // older files carried a "pro" flag
+          this.users.set(u.id, rest);
+        }
       }
       this.logger.info({ count: this.users.size }, "users loaded");
     } catch (err) {
@@ -58,26 +59,16 @@ export class UserStore {
     return this.users.size;
   }
 
-  /** Creates the user on first sign-in, otherwise refreshes name, email and lastLoginAt. `pro` is never touched here. */
+  /** Creates the user on first sign-in, otherwise refreshes name, email and lastLoginAt. */
   upsertOnLogin(profile: Profile): UserRecord {
     const now = this.now();
     const existing = this.users.get(profile.id);
     const record: UserRecord = existing
       ? { ...existing, email: profile.email, name: profile.name, lastLoginAt: now }
-      : { id: profile.id, email: profile.email, name: profile.name, pro: false, createdAt: now, lastLoginAt: now };
+      : { id: profile.id, email: profile.email, name: profile.name, createdAt: now, lastLoginAt: now };
     this.users.set(record.id, record);
     void this.persist();
     return { ...record };
-  }
-
-  /** Returns the updated record, or undefined if there is no such user. */
-  setPro(id: string, pro: boolean): UserRecord | undefined {
-    const existing = this.users.get(id);
-    if (!existing) return undefined;
-    const updated = { ...existing, pro };
-    this.users.set(id, updated);
-    void this.persist();
-    return { ...updated };
   }
 
   flush(): Promise<void> {

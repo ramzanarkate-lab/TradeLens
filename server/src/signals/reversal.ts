@@ -12,7 +12,7 @@ export interface ReversalConfig {
 
 /** One timeframe's closed candle and the numbers measured on it. */
 export interface ReversalInput {
-  label: "1H" | "4H";
+  label: string;
   candles: Candle[];
   /** Index of the candle that just closed. */
   i: number;

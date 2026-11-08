@@ -8,7 +8,7 @@ import "dotenv/config";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { DEFAULT_COSTS, judge, metrics, REPORT_NOTE, replay, splitTrades, type BacktestReport } from "../src/backtest/backtest.js";
+import { DEFAULT_COSTS, judge, metrics, parseStopBuffer, parseTimeframe, REPORT_NOTE, replay, splitTrades, type BacktestReport } from "../src/backtest/backtest.js";
 import { loadHistory } from "../src/backtest/history.js";
 import { parseEnv } from "../src/config/env.js";
 import { DEFAULT_SETTINGS } from "../src/settings/schema.js";
@@ -17,7 +17,7 @@ import { BinanceProvider } from "../src/market/providers/binance.js";
 import { BybitProvider } from "../src/market/providers/bybit.js";
 import { OkxProvider } from "../src/market/providers/okx.js";
 import type { MarketProvider } from "../src/market/providers/types.js";
-import { DAY_MS, HOUR_MS } from "../src/signals/mtf.js";
+import { DAY_MS, HOUR_MS, TRIGGER_LABEL, TRIGGER_MS } from "../src/signals/mtf.js";
 import { readFileSync, existsSync } from "node:fs";
 
 function arg(name: string, fallback?: string): string | undefined {
@@ -45,6 +45,13 @@ const saved = (() => {
 })();
 const s = { ...DEFAULT_SETTINGS.signals, ...saved };
 
+// --stopBuffer <0.1 to 3.0>: the stop-loss buffer in ATR units. Without it, the saved setting is used (default 0.5).
+const stopBufferAtr = parseStopBuffer(arg("stopBuffer"), s.stopBufferAtr ?? 0.5);
+console.log(`Stop buffer: ${stopBufferAtr} x ATR(14)`);
+// --timeframe <15m|1h|4h>: the trigger candles (entry timing). Default 1h. Setup stays on 4H and the trend on 1D.
+const timeframe = parseTimeframe(arg("timeframe"));
+console.log(`Trigger timeframe: ${timeframe}`);
+
 // Pick a provider that can page through history (Kraken keeps only the newest 720 candles).
 const candidates: MarketProvider[] = [new BybitProvider(), new OkxProvider(), new BinanceProvider({ baseUrl: env.MARKET_DATA_BASE_URL })];
 const wanted = arg("provider", env.MARKET_PROVIDER === "kraken" ? "auto" : env.MARKET_PROVIDER);
@@ -65,23 +72,25 @@ const startTime = Math.floor((now - months * 30.4375 * DAY_MS) / HOUR_MS) * HOUR
 const cacheDir = resolve(dataDir, "history");
 const log = (m: string) => console.log(m);
 const common = { provider, symbol, endMs: now, cacheDir, log } as const;
-const h1 = await loadHistory({ ...common, interval: "1h", startMs: startTime - 10 * DAY_MS });
 const h4 = await loadHistory({ ...common, interval: "4h", startMs: startTime - 40 * DAY_MS });
+// the trigger series: 15m or 1h are loaded on their own; for 4h it is the 4H series itself
+const h1 =
+  timeframe === "4h" ? h4 : await loadHistory({ ...common, interval: timeframe, startMs: startTime - (timeframe === "15m" ? 6 : 10) * DAY_MS });
 const d1 = await loadHistory({ ...common, interval: "1d", startMs: startTime - 300 * DAY_MS });
-console.log(`Candles: ${h1.length} x 1H, ${h4.length} x 4H, ${d1.length} x 1D`);
+console.log(`Candles: ${h1.length} x ${TRIGGER_LABEL[timeframe]} (trigger), ${h4.length} x 4H, ${d1.length} x 1D`);
 if (d1.length < 210) throw new Error("Not enough daily history for the 1D EMA200 (need 210 candles).");
 
-const baseConfig = { minScore: s.minScore, minRiskPercent: s.minRiskPercent, maxRiskPercent: s.maxRiskPercent, mode: "paper" as const };
+const baseConfig = { minScore: s.minScore, minRiskPercent: s.minRiskPercent, maxRiskPercent: s.maxRiskPercent, stopBufferAtr, mode: "paper" as const };
 const reversalOn = { enabled: true, minVolumeRatio: s.reversalMinVolumeRatio, levelToleranceAtr: s.reversalLevelToleranceAtr, patterns: s.reversalPatterns };
 
-const lastTime = h1[h1.length - 1]!.time + HOUR_MS;
+const lastTime = h1[h1.length - 1]!.time + TRIGGER_MS[timeframe];
 const splitAt = Math.floor((startTime + (lastTime - startTime) * 0.7) / HOUR_MS) * HOUR_MS;
 const spanMonths = (lastTime - startTime) / (30.4375 * DAY_MS);
 
 /** The same candles, the same rules; only the reversal-candle rule differs. */
 function run(reversal: boolean) {
   const config = { ...baseConfig, ...(reversal ? { reversal: reversalOn } : {}) };
-  const { trades, openAtEnd } = replay({ symbol, series: { h1, h4, d1 }, startTime, config, timeStopHours: s.timeStopHours, costs: DEFAULT_COSTS });
+  const { trades, openAtEnd } = replay({ symbol, series: { h1, h4, d1 }, startTime, config, timeStopHours: s.timeStopHours, costs: DEFAULT_COSTS, timeframe });
   const { inSample, outOfSample } = splitTrades(trades, splitAt);
   return { config, trades, openAtEnd, inM: metrics(inSample, spanMonths * 0.7), outM: metrics(outOfSample, spanMonths * 0.3) };
 }
@@ -101,7 +110,7 @@ const report: BacktestReport = {
   months,
   range: { from: iso(startTime), to: iso(lastTime), splitAt: iso(splitAt) },
   costs: DEFAULT_COSTS,
-  engine: { ...config, timeStopHours: s.timeStopHours },
+  engine: { ...config, timeStopHours: s.timeStopHours, timeframe },
   inSample: inM,
   outOfSample: outM,
   thresholds,
@@ -115,6 +124,9 @@ const report: BacktestReport = {
     score: t.signal.score,
     entry: t.signal.entry!,
     sl: t.signal.sl!,
+    tp1: t.signal.tp1,
+    tp2: t.signal.tp2,
+    tp3: t.signal.tp3,
     exitStatus: t.exitStatus ?? "",
     exitPrice: t.exitPrice,
     grossR: t.grossR,

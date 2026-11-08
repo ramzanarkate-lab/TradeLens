@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "engine:once": "tsx scripts/engine-once.ts",
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "vitest run",
@@ -15,7 +16,8 @@
     "seed": "tsx scripts/seed.ts",
     "check:market": "tsx scripts/check-market.ts",
     "backtest": "tsx scripts/backtest.ts",
-    "news:fetch": "tsx scripts/news-fetch.ts"
+    "news:fetch": "tsx scripts/news-fetch.ts",
+    "search": "tsx scripts/search.ts"
   },
   "dependencies": {
     "cors": "^2.8.6",

@@ -23,10 +23,17 @@ import { CandleCache } from "./market/cache.js";
 import { MarketService } from "./market/service.js";
 import { SecretsService } from "./settings/secrets.js";
 import { SettingsStore, StoreSignalSettings, type SettingsChange } from "./settings/store.js";
+import { CHANNEL_ACCOUNT, DemoTrader } from "./demotrade/demoTrader.js";
 import { SignalServiceV2 } from "./signals/service.v2.js";
 import { SignalStore } from "./signals/store.js";
 import { TelegramClient } from "./telegram/telegramClient.js";
-import { TelegramPoster } from "./telegram/telegramPoster.js";
+import { TelegramNotifier } from "./telegram/telegramNotifier.js";
+import { announceTradeEvent } from "./telegram/tradeEvents.js";
+import { StrategyBacktestStore, strategyPassed } from "./strategies/backtestStore.js";
+import { StrategyRunner, StrategySignalGenerator } from "./strategies/generator.js";
+import { STRATEGIES } from "./strategies/library.js";
+import { createRouting } from "./strategies/routing.js";
+import { StrategySignalStore } from "./strategies/signalStore.js";
 import { NewsService } from "./news/service.js";
 import { RuleBasedScorer, loadKeywords } from "./news/sentiment.js";
 import { loadFeeds, NewsFetcher } from "./news/sources.js";
@@ -206,26 +213,68 @@ const telegramClient = new TelegramClient({
   },
 });
 const telegramLog = pino({ level: "info" }, pino.destination({ dest: resolve("logs", "telegram.log"), mkdir: true, sync: false }));
-const telegramPoster = new TelegramPoster({
+const notifier = new TelegramNotifier({
   client: telegramClient,
   enabled: () => {
     const e = telegramEnv();
     return e.TELEGRAM_ENABLED && Boolean(e.TELEGRAM_BOT_TOKEN && e.TELEGRAM_CHANNEL_ID);
   },
-  timeZone: () => telegramEnv().TELEGRAM_TIMEZONE,
-  strategy: () => {
+  // Admin setting "post demo events" (TELEGRAM_POST_DEMO, default off): events of users' demo trades are sent only while it is on.
+  postDemoEvents: () => telegramEnv().TELEGRAM_POST_DEMO,
+  // The strategy has not passed its backtest, so its signals are "paper": an admin must allow them to reach the channel.
+  allowLive: () => {
     const s = signalSettings.get();
-    return { emaFast: s.emaFast, emaSlow: s.emaSlow, rsiPeriod: s.rsiPeriod };
+    return s.mode === "live" || s.telegramPostPaper;
   },
-  sentFile: resolve(env.DATA_DIR, "telegram-sent.json"),
-  failedFile: resolve(env.DATA_DIR, "telegram-failed.json"),
+  timeZone: () => telegramEnv().TELEGRAM_TIMEZONE,
+  sentFile: resolve(env.DATA_DIR, "telegram-events-sent.json"),
+  failedFile: resolve(env.DATA_DIR, "telegram-events-failed.json"),
   log: telegramLog,
-  startedAt,
 });
 if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHANNEL_ID) logger.info("Telegram disabled: not configured");
 else if (!env.TELEGRAM_ENABLED) logger.info("Telegram disabled: TELEGRAM_ENABLED is not true");
-signalService?.onSignal((signal) => void telegramPoster.handle(signal));
-signalService?.onUpdate((signal, change) => void telegramPoster.handleUpdate(signal, change));
+
+// Demo accounts: every user has a virtual balance and every new signal is traded for them automatically (no real money).
+// One more account, the "channel" account, follows every new signal with the same rules; its events are the ones announced
+// to the Telegram channel (TP1, TP2, TP3, stop loss, trade closed, signal expired).
+const demo = new DemoTrader({
+  file: resolve(env.DATA_DIR, "demo-accounts.json"),
+  logger,
+  price: (symbol) => poller?.getLatest(symbol)?.close,
+  activeSignals: () => signalStore.active().filter((s) => !s.test),
+  // Signals made while the server was down were never announced, so their later events are not announced either.
+  channelAccepts: (signal) => signal.createdAt >= startedAt,
+});
+signalService?.onSignal((signal) => demo.onSignal(signal));
+signalService?.onUpdate((signal) => demo.onUpdate(signal));
+signalService?.onBar((symbol, bar) => demo.onBar(symbol, bar));
+demo.onEvent((userId, trade, event) => {
+  // The channel account's events are the strategy's own. Users' events are "demo" events: the notifier drops them unless the admin allowed them.
+  void announceTradeEvent(notifier, trade, event, userId === CHANNEL_ACCOUNT ? "live" : "demo", signalSettings.get().timeStopHours);
+});
+signalService?.onSignal((signal) => {
+  if (signal.createdAt >= startedAt) void notifier.newSignal(signal); // made before this server run: never posted after a restart
+});
+
+// Strategy library: every strategy runs on each closed candle. Only strategies that PASSED their backtest (a saved result,
+// changed only by a new backtest run) are routed to Telegram and demo; every other signal is stored as research only.
+const strategyBacktests = new StrategyBacktestStore(resolve(env.DATA_DIR, "strategy-backtests.json"));
+const strategySignals = new StrategySignalStore(resolve(env.DATA_DIR, "strategy-signals.json"), logger);
+strategySignals.load();
+const strategyGenerator = new StrategySignalGenerator({
+  strategies: STRATEGIES,
+  store: strategySignals,
+  passed: (strategyId, symbol, timeframe) => strategyPassed(strategyBacktests, strategyId, symbol, timeframe),
+  hooks: createRouting({ telegram: notifier, demo }, logger),
+  logger,
+  stateFile: resolve(env.DATA_DIR, "strategy-runner-state.json"),
+});
+const strategyRunner = env.DEMO_MODE
+  ? undefined
+  : new StrategyRunner({ generator: strategyGenerator, strategies: STRATEGIES, symbols: () => signalSettings.get().enabledSymbols, market, logger });
+signalService?.onBar((symbol, bar) => {
+  if (bar.candleTime === undefined) strategyGenerator.onTick(symbol, bar.close, bar.at); // live prices: levels and the 24-hour expiry
+});
 
 const packageVersion = (() => {
   try {
@@ -252,7 +301,7 @@ const app = createApp({
   }),
   news: newsService && newsFetcher ? { service: newsService, feeds: () => newsFetcher.feedStatus(), settings: () => ({ enabled: newsSettings().enabled, windowMinutes: newsSettings().windowMinutes }) } : undefined,
   adminServer: {
-    runnerReport: runner ? () => ({ events: runner.events(), telegram: telegramPoster.recentResults() }) : undefined,
+    runnerReport: runner ? () => ({ events: runner.events(), telegram: notifier.recentResults() }) : undefined,
     version: packageVersion,
     registry,
     startedAt,
@@ -264,7 +313,7 @@ const app = createApp({
     }),
     telegram: () => {
       const e = telegramEnv();
-      const s = telegramPoster.status();
+      const s = notifier.status();
       return {
         enabled: e.TELEGRAM_ENABLED,
         configured: Boolean(e.TELEGRAM_BOT_TOKEN && e.TELEGRAM_CHANNEL_ID),
@@ -275,6 +324,8 @@ const app = createApp({
       };
     },
   },
+  demo,
+  strategies: { backtests: strategyBacktests, signals: strategySignals },
   backtestDir: resolve(env.DATA_DIR, "backtests"),
   marketHealth: () => ({
     status: env.DEMO_MODE ? "Live" : (stream?.getStatus() ?? "Offline"),
@@ -283,7 +334,7 @@ const app = createApp({
     reason: registry?.failureReason() ?? null,
   }),
   diagnostics: registry ? { report: () => registry.diagnostics() } : undefined,
-  telegram: { env: telegramEnv, client: telegramClient, poster: telegramPoster },
+  telegram: { env: telegramEnv, client: telegramClient, notifier },
   env,
   logger,
   clientCount: () => hub.clientCount(),
@@ -295,7 +346,7 @@ const app = createApp({
   secrets,
   hub,
   users: userStore,
-  dashboard: new DashboardService({ market, settings: settingsStore, signals: signalStore, logger }),
+  dashboard: new DashboardService({ market, settings: settingsStore, signals: signalStore, backtestDir: resolve(env.DATA_DIR, "backtests"), lastChecks: () => signalService?.lastChecks() ?? {}, logger }),
 });
 const server = createServer(app);
 hub.attach(server);
@@ -307,7 +358,8 @@ server.listen(env.PORT, () => {
   runner?.start();
   newsFetcher?.start();
   watchdog.start();
-  telegramPoster.start();
+  notifier.start();
+  strategyRunner?.start();
   stream?.start();
 });
 
@@ -317,7 +369,8 @@ async function shutdown(signal: string): Promise<void> {
   runner?.stop();
   newsFetcher?.stop();
   watchdog.stop();
-  telegramPoster.stop();
+  notifier.stop();
+  strategyRunner?.stop();
   await hub.close();
   await Promise.all([signalStore.flush(), settingsStore.flush(), userStore.flush()]);
   await mirror?.flush();

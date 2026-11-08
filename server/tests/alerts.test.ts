@@ -56,7 +56,7 @@ describe("POST /api/alerts/test", () => {
 
     expect(store.size).toBe(0);
     expect(existsSync(join(dir, "signals.json"))).toBe(false); // nothing was ever written
-    const list = await request(app()).get("/api/signals").expect(200);
+    const list = await request(app()).get("/api/signals").set(bearer(userToken)).expect(200);
     expect(list.body.signals).toEqual([]);
   });
 

@@ -7,7 +7,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthService, createGoogleVerifier, SESSION_SECONDS, type IdTokenVerifierClient } from "../src/auth/auth.js";
 import { UserStore } from "../src/auth/userStore.js";
 import { createApp } from "../src/http/app.js";
-import { SIGNAL_ACCESS } from "../src/http/signalsRoutes.js";
 import { createLogger } from "../src/logging/logger.js";
 import { SecretsService } from "../src/settings/secrets.js";
 import { SettingsStore } from "../src/settings/store.js";
@@ -51,36 +50,33 @@ const signal = (n: number): Signal => ({
 });
 
 describe("UserStore", () => {
-  it("creates a user on first sign-in and updates it on the next, without touching pro", async () => {
+  it("creates a user on first sign-in and updates it on the next, ", async () => {
     let now = 1_000;
     const store = new UserStore(join(dir, "u2.json"), logger, () => now);
     store.load();
     const first = store.upsertOnLogin({ id: "google:1", email: "a@x.test", name: "A" });
-    expect(first).toEqual({ id: "google:1", email: "a@x.test", name: "A", pro: false, createdAt: 1_000, lastLoginAt: 1_000 });
+    expect(first).toEqual({ id: "google:1", email: "a@x.test", name: "A", createdAt: 1_000, lastLoginAt: 1_000 });
 
-    store.setPro("google:1", true);
     now = 5_000;
     const again = store.upsertOnLogin({ id: "google:1", email: "new@x.test", name: "A Renamed" });
-    expect(again).toEqual({ id: "google:1", email: "new@x.test", name: "A Renamed", pro: true, createdAt: 1_000, lastLoginAt: 5_000 });
+    expect(again).toEqual({ id: "google:1", email: "new@x.test", name: "A Renamed", createdAt: 1_000, lastLoginAt: 5_000 });
     expect(store.size).toBe(1);
   });
 
   it("persists to users.json and reloads", async () => {
     users.upsertOnLogin({ id: "u1", email: "u1@x.test", name: "U1" });
-    users.setPro("u1", true);
     await users.flush();
     const onDisk = JSON.parse(readFileSync(join(dir, "users.json"), "utf8"));
     expect(onDisk).toHaveLength(1);
-    expect(onDisk[0]).toMatchObject({ id: "u1", email: "u1@x.test", name: "U1", pro: true });
+    expect(onDisk[0]).toMatchObject({ id: "u1", email: "u1@x.test", name: "U1" });
     expect(onDisk[0]).not.toHaveProperty("role"); // roles are never stored
 
     const reloaded = new UserStore(join(dir, "users.json"), logger);
     reloaded.load();
-    expect(reloaded.get("u1")?.pro).toBe(true);
+    expect(reloaded.get("u1")?.email).toBe("u1@x.test");
   });
 
-  it("returns undefined when setting pro for an unknown user, and sets a corrupt file aside", () => {
-    expect(users.setPro("nobody", true)).toBeUndefined();
+  it("sets a corrupt file aside", () => {
     writeFileSync(join(dir, "bad.json"), "{nope");
     const bad = new UserStore(join(dir, "bad.json"), logger);
     bad.load();
@@ -97,7 +93,8 @@ describe("guests", () => {
     await request(a).put("/api/settings/signals").send({ emaFast: 9 }).expect(401);
     await request(a).put("/api/settings/chart").send({ showEma: false }).expect(401);
     await request(a).get("/api/settings/secrets/status").expect(401);
-    await request(a).put("/api/admin/users/anyone/pro").send({ pro: true }).expect(401);
+    await request(a).get("/api/signals").expect(401); // live signals need a Google sign-in
+    await request(a).get("/api/signals/stats").expect(401);
   });
 
   it("can still read public data: guest settings (chart and alerts only)", async () => {
@@ -108,9 +105,9 @@ describe("guests", () => {
 });
 
 describe("roles, computed on every request", () => {
-  it("GET /api/me reports user, role and pro", async () => {
+  it("GET /api/me reports user and role", async () => {
     const res = await request(app()).get("/api/me").set(bearer(login("u1", "Una"))).expect(200);
-    expect(res.body).toEqual({ user: { id: "u1", email: "u1@x.test", name: "Una" }, role: "user", pro: false });
+    expect(res.body).toEqual({ user: { id: "u1", email: "u1@x.test", name: "Una" }, role: "user" });
   });
 
   it("a signed-in user can read and change their own settings", async () => {
@@ -125,49 +122,27 @@ describe("roles, computed on every request", () => {
   it("a user is not an admin: admin routes answer 403", async () => {
     const t = login("u1");
     await request(app()).get("/api/settings/secrets/status").set(bearer(t)).expect(403);
-    await request(app()).put("/api/admin/users/u1/pro").set(bearer(t)).send({ pro: true }).expect(403);
   });
 
   it("admins can use admin routes and report role admin", async () => {
     const t = login("admin-1");
     const me = await request(app()).get("/api/me").set(bearer(t)).expect(200);
-    expect(me.body).toMatchObject({ role: "admin", pro: true });
-    await request(app()).put("/api/admin/users/admin-1/pro").set(bearer(t)).send({ pro: true }).expect(200);
+    expect(me.body).toMatchObject({ role: "admin" });
   });
 
   it("a user removed from ADMIN_USER_IDS loses admin access on the very next request, with the same token", async () => {
     const t = login("admin-1");
     const a = app();
     await request(a).get("/api/me").set(bearer(t)).expect(200).then((r) => expect(r.body.role).toBe("admin"));
-    users.upsertOnLogin({ id: "somebody", email: "s@x.test", name: "S" });
-    await request(a).put("/api/admin/users/somebody/pro").set(bearer(t)).send({ pro: true }).expect(200);
 
     admins = []; // the operator edits ADMIN_USER_IDS
     const after = await request(a).get("/api/me").set(bearer(t)).expect(200);
     expect(after.body.role).toBe("user");
-    await request(a).put("/api/admin/users/somebody/pro").set(bearer(t)).send({ pro: false }).expect(403);
     await request(a).get("/api/settings/secrets/status").set(bearer(t)).expect(403);
   });
 
-  it("an admin can grant Pro, which changes that user's role on their next request, and remove it again", async () => {
-    const userToken = login("u1");
-    const adminToken = login("admin-1");
-    const a = app();
-
-    const set = await request(a).put("/api/admin/users/u1/pro").set(bearer(adminToken)).send({ pro: true }).expect(200);
-    expect(set.body).toMatchObject({ id: "u1", pro: true });
-    expect((await request(a).get("/api/me").set(bearer(userToken)).expect(200)).body).toMatchObject({ role: "pro", pro: true });
-
-    await request(a).put("/api/admin/users/u1/pro").set(bearer(adminToken)).send({ pro: false }).expect(200);
-    expect((await request(a).get("/api/me").set(bearer(userToken)).expect(200)).body).toMatchObject({ role: "user", pro: false });
-  });
-
-  it("the pro endpoint validates its input and reports unknown users", async () => {
-    const t = login("admin-1");
-    await request(app()).put("/api/admin/users/ghost/pro").set(bearer(t)).send({ pro: true }).expect(404);
-    await request(app()).put("/api/admin/users/u1/pro").set(bearer(t)).send({ pro: "yes" }).expect(400);
-    await request(app()).put("/api/admin/users/u1/pro").set(bearer(t)).send({}).expect(400);
-    await request(app()).put("/api/admin/users/u1/pro").set(bearer(t)).send({ pro: true, role: "admin" }).expect(400);
+  it("there is no Pro tier: the old endpoint is gone", async () => {
+    await request(app()).put("/api/admin/users/u1/pro").set(bearer(login("admin-1"))).send({ pro: true }).expect(404);
   });
 });
 
@@ -176,12 +151,9 @@ describe("what each role can read of the signal list", () => {
     for (let i = 1; i <= 60; i++) await signals.add(signal(i));
   });
 
-  it("guests see the last 5 with no paging; signed-in users page through the full history", async () => {
+  it("guests get 401; every signed-in user pages through the full history for free", async () => {
     const a = app();
-    const guest = await request(a).get("/api/signals?limit=200&offset=10").expect(200);
-    expect(guest.body).toMatchObject({ cap: SIGNAL_ACCESS.guest, role: "guest", total: 60, hasMore: false, locked: true });
-    expect(guest.body.signals.map((s: Signal) => s.createdAt)).toEqual([60, 59, 58, 57, 56]);
-
+    await request(a).get("/api/signals").expect(401);
     const user = await request(a).get("/api/signals?limit=50").set(bearer(login("u1"))).expect(200);
     expect(user.body).toMatchObject({ role: "user", total: 60, hasMore: true, locked: false });
     expect(user.body.signals).toHaveLength(50);
@@ -191,7 +163,7 @@ describe("what each role can read of the signal list", () => {
   });
 
   it("a smaller limit is respected", async () => {
-    const res = await request(app()).get("/api/signals?limit=2").expect(200);
+    const res = await request(app()).get("/api/signals?limit=2").set(bearer(login("u1"))).expect(200);
     expect(res.body.signals).toHaveLength(2);
   });
 
@@ -203,19 +175,12 @@ describe("what each role can read of the signal list", () => {
     await request(a).get(`/api/signals/${id}`).set(bearer(login("u1"))).expect(200);
   });
 
-  it("stats: everyone gets the win rate and counts, only pro and admin get the rest", async () => {
+  it("stats need a sign-in, and every signed-in user gets the full numbers", async () => {
     const a = app();
-    users.upsertOnLogin({ id: "p1", email: "p@x.test", name: "P" });
-    users.setPro("p1", true);
+    await request(a).get("/api/signals/stats").expect(401);
     const user = await request(a).get("/api/signals/stats").set(bearer(login("u1"))).expect(200);
-    expect(Object.keys(user.body).sort()).toEqual(["closed", "open", "tier", "total", "winRate", "wins"]);
-    expect(user.body.tier).toBe("basic");
-    const pro = await request(a).get("/api/signals/stats").set(bearer(login("p1"))).expect(200);
-    expect(pro.body).toMatchObject({ tier: "full", total: 60 });
-    expect(pro.body).toHaveProperty("avgR");
-    expect(pro.body).toHaveProperty("profitFactor");
-    expect(pro.body).toHaveProperty("maxDrawdownR");
-    expect(pro.body).toHaveProperty("countByStatus");
+    expect(user.body).toMatchObject({ tier: "full", total: 60 });
+    for (const key of ["avgR", "profitFactor", "maxDrawdownR", "countByStatus"]) expect(user.body).toHaveProperty(key);
   });
 });
 
@@ -282,10 +247,10 @@ describe("Google sign-in", () => {
     const claims = jwt.decode(res.body.token) as { iat: number; exp: number };
     expect(claims.exp - claims.iat).toBe(604_800);
 
-    expect(users.get("google:42")).toMatchObject({ email: "g@x.test", name: "Gee", pro: false });
+    expect(users.get("google:42")).toMatchObject({ email: "g@x.test", name: "Gee" });
     expect(users.get("google:42")?.createdAt).toBeGreaterThan(0);
     const me = await request(a).get("/api/me").set(bearer(res.body.token)).expect(200);
-    expect(me.body).toMatchObject({ role: "admin", pro: true });
+    expect(me.body).toMatchObject({ role: "admin" });
   });
 
   it("a rejected Google token is a 401 and creates no user", async () => {

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { symbolSchema, timeframeSchema } from "../config/symbols.js";
 import type { Settings } from "../types/index.js";
 import { PATTERN_KEYS } from "../signals/patterns.js";
+import { TRIGGER_TIMEFRAMES } from "../signals/mtf.js";
 
 const rsiBound = z.number().min(1).max(99);
 
@@ -17,11 +18,15 @@ const bases = {
       rsiSellAbove: rsiBound,
       cooldownMinutes: z.number().int().min(0).max(10_080),
       timeframe: timeframeSchema,
+      /** Candle size that triggers entries (setup stays on 4H, trend on 1D). */
+      triggerTimeframe: z.enum(TRIGGER_TIMEFRAMES),
       /** Multi-indicator engine: a signal fires only with a score of at least this (0 to 100). */
       minScore: z.number().int().min(0).max(100),
       /** A signal is rejected if the stop is closer than this to the entry (percent of entry). */
       minRiskPercent: z.number().min(0.05).max(10),
       maxRiskPercent: z.number().min(0.5).max(20),
+      /** Stop-loss buffer beyond the swing low/high or pivot, in ATR(14) units. */
+      stopBufferAtr: z.number().min(0.1).max(3),
       /** A signal that is still running after this many hours is closed (TIME_EXIT). */
       timeStopHours: z.number().int().min(1).max(720),
       /** New signals are "paper" unless an admin switches to "live" (needs a PASS backtest). */
@@ -36,6 +41,8 @@ const bases = {
       reversalLevelToleranceAtr: z.number().min(0.1).max(3),
       /** One switch per pattern family (the bearish mirror follows its bullish pattern). */
       reversalPatterns: z.object(Object.fromEntries(PATTERN_KEYS.map((k) => [k, z.boolean()])) as Record<(typeof PATTERN_KEYS)[number], z.ZodBoolean>).strict(),
+      /** Admin only: also post paper-mode signals to Telegram, clearly labelled as unverified. Live signals are always posted. */
+      telegramPostPaper: z.boolean(),
       /** News filter kill switch. false = news has no effect at all. */
       newsEnabled: z.boolean(),
       /** Only headlines published this many minutes ago or less are used. */
@@ -112,9 +119,11 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze({
     rsiSellAbove: 75,
     cooldownMinutes: 60,
     timeframe: "1h",
+    triggerTimeframe: "15m",
     minScore: 70,
     minRiskPercent: 0.4,
     maxRiskPercent: 4.0,
+    stopBufferAtr: 0.5,
     timeStopHours: 48,
     mode: "paper",
     backtestMinProfitFactor: 1.3,
@@ -124,6 +133,7 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze({
     reversalMinVolumeRatio: 1.2,
     reversalLevelToleranceAtr: 0.5,
     reversalPatterns: { hammer: true, engulfing: true, piercing: true, morningStar: true, tweezer: true },
+    telegramPostPaper: true,
     newsEnabled: true,
     newsWindowMinutes: 60,
     newsBoostPoints: 5,

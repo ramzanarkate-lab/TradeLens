@@ -142,7 +142,7 @@ describe("admin-only endpoints", () => {
         return u;
       })(),
       diagnostics: { report: () => registry.diagnostics() },
-      telegram: { env: () => secrets.reloadedEnv, client, poster: { status: () => ({ lastSuccessAt: null, postsLast24h: 0, failed: 0, abandoned: 0 }) } },
+      telegram: { env: () => secrets.reloadedEnv, client, notifier: { status: () => ({ lastSuccessAt: null, postsLast24h: 0, failed: 0, abandoned: 0 }) } },
       adminServer: {
         version: "9.9.9",
         registry,
@@ -158,7 +158,7 @@ describe("admin-only endpoints", () => {
 
   it("GET /api/me reports Admin for the verified admin email and User for everyone else", async () => {
     const { app, admin, other, unverified } = await build();
-    // the older /api/me reply has role in lower case; the app maps it to Guest, User, Pro, Admin
+    // the older /api/me reply has role in lower case; the app maps it to Guest, User, Admin
     expect((await request(app).get("/api/me").set(bearer(admin)).expect(200)).body.role).toBe("admin");
     expect((await request(app).get("/api/me").set(bearer(other)).expect(200)).body.role).toBe("user");
     expect((await request(app).get("/api/me").set(bearer(unverified)).expect(200)).body.role).toBe("user");
@@ -175,7 +175,6 @@ describe("admin-only endpoints", () => {
       ["get", "/api/admin/server"],
       ["put", "/api/admin/server/market-provider", { provider: "okx" }],
       ["post", "/api/alerts/test", {}],
-      ["put", "/api/admin/users/google:2/pro", { pro: true }],
     ];
     for (const [method, url, body] of calls) {
       for (const token of [other, unverified]) {

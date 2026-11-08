@@ -25,6 +25,10 @@ import { createSettingsRouter } from "./settingsRoutes.js";
 import { createMarketRouter } from "./marketRoutes.js";
 import { createSignalsRouter } from "./signalsRoutes.js";
 import { createNewsRouter, type NewsRouterDeps } from "./newsRoutes.js";
+import { createResultsRouter } from "./resultsRoutes.js";
+import { createDemoRouter } from "./demoTradeRoutes.js";
+import { createStrategyRouter, type StrategyRouterDeps } from "./strategyRoutes.js";
+import type { DemoTrader } from "../demotrade/demoTrader.js";
 import { createApiRateLimiter, type RateLimitOptions } from "./rateLimit.js";
 
 export interface AppDeps {
@@ -43,7 +47,7 @@ export interface AppDeps {
   dashboard?: DashboardService;
   /** Where test alerts are broadcast (required for POST /api/alerts/test). */
   hub?: Publisher;
-  /** Needed for PUT /api/admin/users/:id/pro. */
+  /** Signed-in accounts (data/users.json). */
   users?: UserStore;
   /** Telegram status and test endpoints. */
   telegram?: TelegramRouterDeps;
@@ -59,6 +63,10 @@ export interface AppDeps {
   healthExtra?: () => Record<string, unknown>;
   /** GET /api/news and GET /api/news/status. */
   news?: NewsRouterDeps;
+  /** GET /api/demo, POST /api/demo/refill and the admin demo settings: virtual accounts, one per user. */
+  demo?: DemoTrader;
+  /** Admin view of the strategy library: backtest table and every strategy signal. */
+  strategies?: StrategyRouterDeps;
 }
 
 export interface MarketHealth {
@@ -95,7 +103,7 @@ function marketHealthFields(m: MarketHealth) {
   };
 }
 
-export function createApp({ env, logger, clientCount, rateLimit, market, signals, auth, devLogin, settings, secrets, dashboard, hub, users, telegram, marketHealth, diagnostics, backtestDir, adminServer, healthExtra, news }: AppDeps): Express {
+export function createApp({ env, logger, clientCount, rateLimit, market, signals, auth, devLogin, settings, secrets, dashboard, hub, telegram, marketHealth, diagnostics, backtestDir, adminServer, healthExtra, news, demo, strategies }: AppDeps): Express {
   const app = express();
   app.disable("x-powered-by");
 
@@ -134,9 +142,12 @@ export function createApp({ env, logger, clientCount, rateLimit, market, signals
   if (market) app.use("/api", createMarketRouter(market));
   if (signals) app.use("/api", createSignalsRouter(signals));
   if (news) app.use("/api", createNewsRouter(news));
+  if (signals && backtestDir) app.use("/api", createResultsRouter({ signals, backtestDir }));
+  if (demo) app.use("/api", createDemoRouter({ demo }));
+  if (strategies) app.use("/api", createStrategyRouter(strategies));
   if (dashboard) app.use("/api", createDashboardRouter(dashboard));
   if (auth && hub) app.use("/api", createAlertsRouter({ hub }));
-  if (auth) app.use("/api", createAuthRouter({ auth, logger, devLogin: devLogin === true, users }));
+  if (auth) app.use("/api", createAuthRouter({ auth, logger, devLogin: devLogin === true }));
   if (auth && telegram) app.use("/api", createTelegramRouter(telegram));
   if (auth && adminServer) app.use("/api", createAdminRouter(adminServer));
   if (auth && diagnostics) app.use("/api", createDiagnosticsRouter(diagnostics));

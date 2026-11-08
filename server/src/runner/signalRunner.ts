@@ -2,10 +2,10 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { dirname } from "node:path";
 import { isSymbol, type Symbol } from "../config/symbols.js";
 import type { Logger } from "../logging/logger.js";
+import type { TriggerTimeframe } from "../signals/mtf.js";
 import type { SignalSettingsProvider } from "../signals/settingsProvider.js";
 import type { Candle, Signal } from "../types/index.js";
 
-export const RUNNER_TIMEFRAMES = ["1h"] as const;
 export const STALE_AFTER_MS = 5 * 60_000;
 const MAX_EVENTS = 20;
 
@@ -21,7 +21,7 @@ export interface SignalRunnerDeps {
     processHour(symbol: Symbol, rethrow?: boolean): Promise<Signal | null>;
     checkPrice(symbol: Symbol, price: number, at: number): void;
   };
-  market: { getFreshCandles(symbol: Symbol, interval: "1h", limit: number): Promise<Candle[]> };
+  market: { getFreshCandles(symbol: Symbol, interval: TriggerTimeframe, limit: number): Promise<Candle[]> };
   /** Latest known price candle per symbol (the 5-second poller). Optional. */
   prices?: { getLatest(symbol: string): Candle | undefined };
   settings: SignalSettingsProvider;
@@ -63,6 +63,7 @@ export class SignalRunner {
   private priceTimer?: NodeJS.Timeout;
   private lastTickAt = 0;
   private readonly lastCandle: Record<string, number> = {};
+  private readonly lookedAtStart = new Set<string>();
   private lastSignalAt: number | null = null;
   private readonly log: RunnerEvent[] = [];
 
@@ -167,21 +168,21 @@ export class SignalRunner {
 
   private async runSymbol(symbol: Symbol): Promise<void> {
     const timeout = this.d.callTimeoutMs ?? 30_000;
-    for (const timeframe of RUNNER_TIMEFRAMES) {
+    // The trigger timeframe is a setting (15m, 1h or 4h); a change applies from the next pass.
+    for (const timeframe of [this.d.settings.get().triggerTimeframe ?? "1h"]) {
       const candles = await withTimeout(this.d.market.getFreshCandles(symbol, timeframe, 3), timeout, `${symbol} ${timeframe} candles`);
       const last = candles.filter((c) => c.closed).sort((a, b) => a.time - b.time).at(-1); // never the forming candle
       if (!last) continue;
       this.lastCandle[symbol] = last.time;
       const key = `${symbol}:${timeframe}`;
       const done = this.state[key];
-      if (done === undefined) {
-        // First run ever for this symbol: remember where we are, do not act on an old candle.
-        this.setDone(key, last.time);
-        this.record({ type: "baseline", symbol, detail: `starting after ${new Date(last.time).toISOString()}` });
-        continue;
-      }
-      if (last.time <= done) continue; // already processed
+      const firstLook = !this.lookedAtStart.has(key);
+      // The first look after a start evaluates the newest closed candle once. It lets the dashboard say why there is no
+      // signal, and finds a setup that formed while the server was down (that signal is stored but never posted to Telegram:
+      // the poster skips signals made before this start). A candle is never turned into a signal twice: the service skips it.
+      if (!firstLook && done !== undefined && last.time <= done) continue; // already processed
       const signal = await withTimeout(this.d.service.processHour(symbol, true), timeout, `${symbol} evaluation`);
+      this.lookedAtStart.add(key);
       this.setDone(key, last.time); // only after a successful evaluation, so a failure is retried on the next pass
       if (signal) {
         this.lastSignalAt = this.now();

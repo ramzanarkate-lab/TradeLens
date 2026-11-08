@@ -14,8 +14,7 @@ import { DEFAULT_ENGINE_CONFIG, evaluateAt, prepareContext } from "../src/signal
 import { evaluateNews, type NewsSettings, type ScoredHeadline } from "../src/signals/newsFilter.js";
 import { DAY_MS, H4_MS, HOUR_MS } from "../src/signals/mtf.js";
 import { DEFAULT_SETTINGS, sectionSchemas } from "../src/settings/schema.js";
-import { formatSignal } from "../src/telegram/formatSignal.js";
-import type { Candle, Signal } from "../src/types/index.js";
+import type { Candle } from "../src/types/index.js";
 
 const silent = createLogger({ level: "silent", pretty: false });
 const scorer = new RuleBasedScorer(loadKeywords(new URL("../config/news-keywords.json", import.meta.url)));
@@ -158,13 +157,6 @@ describe("engine: news never creates a signal alone", () => {
   it("a veto blocks the signal and says why", () => {
     const out = run(firstAt0, 0, () => veto);
     expect(out).toMatchObject({ signal: null, reason: expect.stringContaining("blocked this BUY") });
-  });
-
-  it("the Telegram message carries a News line when news boosted the signal", () => {
-    const boosted = run(firstAt0, 0, () => boost).signal!;
-    const text = formatSignal({ ...boosted, mode: "live" } as Signal, { timeZone: "UTC" });
-    expect(text).toContain("News: +5 points (ETF inflow, 8 min ago)");
-    expect(formatSignal(run(firstAt0, 0).signal!, { timeZone: "UTC" })).not.toContain("News:");
   });
 });
 

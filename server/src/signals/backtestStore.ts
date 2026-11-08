@@ -27,3 +27,44 @@ export function latestBacktest(dir: string, symbol: string): BacktestSummary | n
     return null;
   }
 }
+
+export interface BacktestTradeSummary {
+  createdAt: string;
+  side: string;
+  score: number | null;
+  entry: number;
+  sl: number;
+  tp1: number | null;
+  tp2: number | null;
+  tp3: number | null;
+  exitStatus: string;
+  exitPrice: number | null;
+  netR: number;
+}
+
+/** The newest trade of the latest saved backtest for a symbol: what the technique last did on a past chart. Null if there is none. */
+export function lastBacktestTrade(dir: string, symbol: string): BacktestTradeSummary | null {
+  const found = latestBacktest(dir, symbol);
+  if (!found) return null;
+  try {
+    const report = JSON.parse(readFileSync(join(dir, found.file), "utf8")) as { trades?: Array<Record<string, unknown>> };
+    const newest = [...(report.trades ?? [])].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))[0];
+    if (!newest) return null;
+    const num = (v: unknown) => (typeof v === "number" ? v : null);
+    return {
+      createdAt: String(newest.createdAt),
+      side: String(newest.side),
+      score: num(newest.score),
+      entry: Number(newest.entry),
+      sl: Number(newest.sl),
+      tp1: num(newest.tp1),
+      tp2: num(newest.tp2),
+      tp3: num(newest.tp3),
+      exitStatus: String(newest.exitStatus ?? ""),
+      exitPrice: num(newest.exitPrice),
+      netR: Number(newest.netR),
+    };
+  } catch {
+    return null;
+  }
+}

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_SIGNAL_SETTINGS } from "../src/config/signalDefaults.js";
+import { AuthService } from "../src/auth/auth.js";
 import { createApp } from "../src/http/app.js";
 import { createLogger } from "../src/logging/logger.js";
 import { SignalEngine } from "../src/signals/engine.js";
@@ -87,29 +88,32 @@ describe("GET /api/signals", () => {
     const store = new SignalStore(join(dir, "signals.json"), logger);
     store.load();
     for (let i = 1; i <= 4; i++) await store.add(makeSignal(i, i % 2 ? "BTCUSDT" : "SOLUSDT"));
-    const app = createApp({ env: { CORS_ORIGINS: [] }, logger, clientCount: () => 0, signals: store });
-    return { app, store };
+    const auth = new AuthService({ secret: "unit-test-secret-at-least-16-chars", adminIds: () => [] });
+    const token = auth.issue({ id: "u1", email: "u@x.test", name: "U" }).token;
+    const app = createApp({ env: { CORS_ORIGINS: [] }, logger, clientCount: () => 0, signals: store, auth });
+    return { app, store, bearer: { Authorization: `Bearer ${token}` } };
   }
 
   it("lists newest first, filters by symbol and limits", async () => {
-    const { app } = await setup();
-    const all = await request(app).get("/api/signals").expect(200);
+    const { app, bearer } = await setup();
+    await request(app).get("/api/signals").expect(401); // live signals need a Google sign-in
+    const all = await request(app).get("/api/signals").set(bearer).expect(200);
     expect(all.body.signals.map((s: Signal) => s.createdAt)).toEqual([4, 3, 2, 1]);
 
-    const btc = await request(app).get("/api/signals?symbol=BTCUSDT&limit=1").expect(200);
+    const btc = await request(app).get("/api/signals?symbol=BTCUSDT&limit=1").set(bearer).expect(200);
     expect(btc.body.signals.map((s: Signal) => s.createdAt)).toEqual([3]);
   });
 
   it("validates symbol and limit", async () => {
-    const { app } = await setup();
-    await request(app).get("/api/signals?symbol=DOGEUSDT").expect(400);
-    await request(app).get("/api/signals?limit=0").expect(400);
-    await request(app).get("/api/signals?limit=1001").expect(400);
+    const { app, bearer } = await setup();
+    await request(app).get("/api/signals?symbol=DOGEUSDT").set(bearer).expect(400);
+    await request(app).get("/api/signals?limit=0").set(bearer).expect(400);
+    await request(app).get("/api/signals?limit=1001").set(bearer).expect(400);
   });
 
   it("an individual signal needs a sign-in", async () => {
     const { app } = await setup();
-    // Individual signals need a sign-in; the list is open to guests (see accounts.test.ts for the roles).
+    // Individual signals need a sign-in; the list needs one too.
     await request(app).get(`/api/signals/${makeSignal(2, "SOLUSDT").id}`).expect(401);
   });
 });

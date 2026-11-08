@@ -50,6 +50,9 @@ export function createSettingsRouter({ settings, secrets, backtestDir }: Setting
   // Signal settings. Changing the mode is the publishing gate: admin only, and live needs a PASS backtest for every enabled symbol.
   router.put("/settings/signals", requireUser, (req, res) => {
     const body = req.body as Record<string, unknown> | undefined;
+    if (body && typeof body === "object" && "telegramPostPaper" in body && req.user!.role !== "admin") {
+      throw new AppError(403, "FORBIDDEN", "Only an admin can change whether paper signals are posted to Telegram.");
+    }
     if (body && typeof body === "object" && "mode" in body) {
       if (req.user!.role !== "admin") throw new AppError(403, "FORBIDDEN", "Only an admin can change the signal mode.");
       if (body.mode === "live") {

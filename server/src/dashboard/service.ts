@@ -1,6 +1,7 @@
 import type { Logger } from "../logging/logger.js";
 import type { MarketService } from "../market/service.js";
 import { ema } from "../signals/indicators.js";
+import { lastBacktestTrade, type BacktestTradeSummary } from "../signals/backtestStore.js";
 import type { SignalStore } from "../signals/store.js";
 import type { SettingsStore } from "../settings/store.js";
 import type { Candle, PivotLevels, Signal } from "../types/index.js";
@@ -25,6 +26,10 @@ export interface DashboardSymbol {
   /** Nearest pivot level at or below the price. */
   pivotBelow: PivotRef | null;
   lastSignal: Signal | null;
+  /** What the engine decided at its latest look at this symbol, so "no signal" is explained. */
+  lastCheck: { at: number; candleTime: number; signal: boolean; reason: string | null } | null;
+  /** The newest trade of the saved backtest (a past chart, not a live signal). Shown when there is no live signal yet. */
+  lastBacktest: BacktestTradeSummary | null;
   /** Closes of the last 24 closed 1h candles, oldest first. */
   sparkline: number[];
 }
@@ -44,6 +49,10 @@ export interface DashboardDeps {
   market: Pick<MarketService, "getPrice" | "getCandles" | "getPivots">;
   settings: Pick<SettingsStore, "get">;
   signals: Pick<SignalStore, "list">;
+  /** Folder with backtest reports, for the last-backtest fallback. */
+  backtestDir?: string;
+  /** The signal service's latest check per symbol. */
+  lastChecks?: () => Record<string, { at: number; candleTime: number; signal: boolean; reason: string | null }>;
   logger?: Logger;
   now?: () => number;
   /** How long a built response is reused (default 5s). */
@@ -161,6 +170,8 @@ export class DashboardService {
         pivotAbove: near.above,
         pivotBelow: near.below,
         lastSignal: signals.list({ symbol, limit: 1 })[0] ?? null,
+        lastCheck: this.deps.lastChecks?.()[symbol] ?? null,
+        lastBacktest: this.deps.backtestDir ? lastBacktestTrade(this.deps.backtestDir, symbol) : null,
         sparkline: closedCloses(hourly).slice(-SPARKLINE_POINTS),
       },
       failure: failure?.reason,

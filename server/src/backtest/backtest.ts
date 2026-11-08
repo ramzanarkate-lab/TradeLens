@@ -1,8 +1,8 @@
 import type { Symbol } from "../config/symbols.js";
 import type { Signal } from "../types/index.js";
-import { evaluateAt, prepareContext, type EngineConfig } from "../signals/engine.v2.js";
+import { evaluateAt, prepareContext, type EngineConfig, type EngineContext } from "../signals/engine.v2.js";
 import { advance, isActive } from "../signals/lifecycle.js";
-import { HOUR_MS, type MtfSeries } from "../signals/mtf.js";
+import { isTriggerTimeframe, TRIGGER_TIMEFRAMES, type MtfSeries, type TriggerTimeframe } from "../signals/mtf.js";
 import { reachedTp1 } from "../signals/stats.js";
 
 export interface CostModel {
@@ -32,6 +32,25 @@ export interface ReplayResult {
   open: Signal[];
 }
 
+/** Reads the --timeframe value: 15m, 1h or 4h (default 1h). */
+export function parseTimeframe(raw: string | undefined): TriggerTimeframe {
+  if (raw === undefined) return "1h";
+  if (!isTriggerTimeframe(raw)) throw new Error(`--timeframe must be one of ${TRIGGER_TIMEFRAMES.join(", ")} (got "${raw}")`);
+  return raw;
+}
+
+export const STOP_BUFFER_RANGE = { min: 0.1, max: 3.0 } as const;
+
+/** Reads the --stopBuffer value. Throws a clear message unless it is a number from 0.1 to 3.0. */
+export function parseStopBuffer(raw: string | undefined, fallback = 0.5): number {
+  if (raw === undefined) return fallback;
+  const n = Number(raw);
+  if (raw.trim() === "" || !Number.isFinite(n) || n < STOP_BUFFER_RANGE.min || n > STOP_BUFFER_RANGE.max) {
+    throw new Error(`--stopBuffer must be a number from ${STOP_BUFFER_RANGE.min} to ${STOP_BUFFER_RANGE.max} (got "${raw}")`);
+  }
+  return n;
+}
+
 export interface ReplayOptions {
   symbol: Symbol;
   /** Closed candles, oldest first. Must reach back far enough for the 1D EMA200. */
@@ -41,6 +60,10 @@ export interface ReplayOptions {
   config: EngineConfig;
   timeStopHours: number;
   costs?: CostModel;
+  /** Trigger timeframe: the candles in series.h1. Default "1h" (the original behaviour). */
+  timeframe?: TriggerTimeframe;
+  /** A context prepared earlier for the same series and timeframe (saves recomputing indicators in a parameter search). */
+  context?: EngineContext;
 }
 
 /** R-multiple after costs: entry and exit fills move against the trade by the slippage, and each side pays the fee. */
@@ -62,7 +85,7 @@ export function netResultR(side: Signal["side"], entry: number, sl: number, exit
 export function replay(opts: ReplayOptions): ReplayResult {
   const { symbol, series, config } = opts;
   const costs = opts.costs ?? DEFAULT_COSTS;
-  const ctx = prepareContext(symbol, series);
+  const ctx = opts.context ?? prepareContext(symbol, series, opts.timeframe ?? "1h");
   let running: Signal[] = [];
   const trades: Trade[] = [];
   let counter = 0;
@@ -77,7 +100,7 @@ export function replay(opts: ReplayOptions): ReplayResult {
         still.push(s);
         continue;
       }
-      const next = advance(s, { high: candle.high, low: candle.low, close: candle.close, at: candle.time + HOUR_MS }, opts.timeStopHours).signal;
+      const next = advance(s, { high: candle.high, low: candle.low, close: candle.close, at: candle.time + ctx.triggerMs }, opts.timeStopHours).signal;
       if (isActive(next)) {
         still.push(next);
       } else {
@@ -181,7 +204,7 @@ export interface BacktestReport {
   months: number;
   range: { from: string; to: string; splitAt: string };
   costs: CostModel;
-  engine: EngineConfig & { timeStopHours: number };
+  engine: EngineConfig & { timeStopHours: number; timeframe?: string };
   inSample: PartMetrics;
   outOfSample: PartMetrics;
   thresholds: Thresholds;
@@ -189,7 +212,7 @@ export interface BacktestReport {
   verdict: "PASS" | "FAIL";
   openAtEnd: number;
   note: string;
-  trades: Array<{ createdAt: string; side: string; score: number | undefined; entry: number; sl: number; exitStatus: string; exitPrice: number; grossR: number; netR: number; part: "in-sample" | "out-of-sample" }>;
+  trades: Array<{ createdAt: string; side: string; score: number | undefined; entry: number; sl: number; tp1?: number; tp2?: number; tp3?: number; exitStatus: string; exitPrice: number; grossR: number; netR: number; part: "in-sample" | "out-of-sample" }>;
 }
 
 export const REPORT_NOTE =

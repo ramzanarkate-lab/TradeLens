@@ -34,7 +34,9 @@ const envSchema = z
     TELEGRAM_BOT_TOKEN: optionalString,
     TELEGRAM_CHANNEL_ID: optionalString,
     /** Telegram posts only when this is true AND both TELEGRAM_BOT_TOKEN and TELEGRAM_CHANNEL_ID are set. */
-    TELEGRAM_ENABLED: z.preprocess(emptyToUndefined, z.enum(["true", "false"]).default("false")).transform((v) => v === "true"),
+    TELEGRAM_ENABLED: z.preprocess(emptyToUndefined, z.enum(["true", "false"]).default("true")).transform((v) => v === "true"),
+    /** Admin toggle: also post the events of demo trades (TP1, TP2, TP3, stop) to the channel. Off by default. */
+    TELEGRAM_POST_DEMO: z.preprocess(emptyToUndefined, z.enum(["true", "false"]).default("false")).transform((v) => v === "true"),
     /** Public invite link the app shows as "Join our channel". Empty = no link. */
     TELEGRAM_CHANNEL_LINK: z.preprocess(emptyToUndefined, z.string().regex(/^https:\/\/\S+$/, "must be an https:// link").optional()),
     /** IANA time zone for the timestamp in Telegram messages. */

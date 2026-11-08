@@ -4,7 +4,7 @@ import type { Symbol } from "../config/symbols.js";
 import type { Candle, PivotLevels, Signal, SignalMode, SignalSide } from "../types/index.js";
 import { adx, atr, ema, macd, rsi, volumeRatio } from "./indicators.js";
 import { computeLevels } from "./levels.js";
-import { alignIndices, DAY_MS, H4_MS, HOUR_MS, type MtfSeries } from "./mtf.js";
+import { alignIndices, DAY_MS, H4_MS, TRIGGER_LABEL, TRIGGER_MS, type MtfSeries, type TriggerTimeframe } from "./mtf.js";
 import { NO_NEWS, type NewsEvaluation } from "./newsFilter.js";
 import { assessReversal, type ReversalConfig, type ReversalInput } from "./reversal.js";
 
@@ -16,6 +16,10 @@ export interface EngineConfig {
   mode: SignalMode;
   /** Reversal candle patterns add up to 15 points at a key level. Absent = off. */
   reversal?: ReversalConfig;
+  /** Stop buffer in ATR units (default 0.5). */
+  stopBufferAtr?: number;
+  /** Target distance scale (default 1 = 1R/2R/3R). */
+  targetScale?: number;
 }
 
 export const DEFAULT_ENGINE_CONFIG: EngineConfig = { minScore: 70, minRiskPercent: 0.4, maxRiskPercent: 4.0, mode: "paper" };
@@ -53,7 +57,7 @@ export const meetsMinScore = (score: number, minScore: number): boolean => score
 const f = (n: number, d = 1) => n.toFixed(d);
 
 /** Setup (4H) is worth 40 points, trigger (1H) 60 points. */
-export function scoreSide(side: SignalSide, x: ScoreFacts): Score {
+export function scoreSide(side: SignalSide, x: ScoreFacts, label = "1H"): Score {
   const buy = side === "BUY";
   const reasons: string[] = [];
   let total = 0;
@@ -73,9 +77,9 @@ export function scoreSide(side: SignalSide, x: ScoreFacts): Score {
 
   // ---- trigger, 1H: 60 points
   const rsiOk = buy ? x.rsi > x.rsiPrev && x.rsi >= 35 && x.rsi <= 50 : x.rsi < x.rsiPrev && x.rsi >= 50 && x.rsi <= 65;
-  if (rsiOk) add(15, `1H RSI ${f(x.rsi)} ${buy ? "rising from the low zone" : "falling from the high zone"}`);
-  if (buy ? x.histPrev <= 0 && x.hist > 0 : x.histPrev >= 0 && x.hist < 0) add(20, `1H MACD histogram crossed ${buy ? "above" : "below"} 0`);
-  if (buy ? x.close > x.ema20h1 : x.close < x.ema20h1) add(10, `1H close ${buy ? "above" : "below"} EMA20`);
+  if (rsiOk) add(15, `${label} RSI ${f(x.rsi)} ${buy ? "rising from the low zone" : "falling from the high zone"}`);
+  if (buy ? x.histPrev <= 0 && x.hist > 0 : x.histPrev >= 0 && x.hist < 0) add(20, `${label} MACD histogram crossed ${buy ? "above" : "below"} 0`);
+  if (buy ? x.close > x.ema20h1 : x.close < x.ema20h1) add(10, `${label} close ${buy ? "above" : "below"} EMA20`);
   if (x.volRatio >= 1.2) add(15, `Volume ${f(x.volRatio, 2)}x its 20-candle average`);
 
   return { total, reasons };
@@ -84,7 +88,11 @@ export function scoreSide(side: SignalSide, x: ScoreFacts): Score {
 /** Everything computed once per symbol, so a backtest can walk through thousands of candles quickly. */
 export interface EngineContext {
   symbol: Symbol;
+  /** h1 holds the TRIGGER candles (1H by default; 15m or 4H when a different trigger timeframe is chosen). */
   series: MtfSeries;
+  timeframe: TriggerTimeframe;
+  /** Length of one trigger candle in ms. */
+  triggerMs: number;
   /** Index of the newest closed 4H / 1D candle for each 1H candle (no lookahead). */
   align4: number[];
   alignD: number[];
@@ -104,14 +112,17 @@ export interface EngineContext {
   atr1: number[];
 }
 
-export function prepareContext(symbol: Symbol, series: MtfSeries): EngineContext {
+export function prepareContext(symbol: Symbol, series: MtfSeries, timeframe: TriggerTimeframe = "1h"): EngineContext {
   const { h1, h4, d1 } = series;
+  const triggerMs = TRIGGER_MS[timeframe];
   const closes1 = h1.map((c) => c.close);
   return {
     symbol,
     series,
-    align4: alignIndices(h1, HOUR_MS, h4, H4_MS),
-    alignD: alignIndices(h1, HOUR_MS, d1, DAY_MS),
+    timeframe,
+    triggerMs,
+    align4: alignIndices(h1, triggerMs, h4, H4_MS),
+    alignD: alignIndices(h1, triggerMs, d1, DAY_MS),
     ema200d: ema(d1.map((c) => c.close), 200),
     ema20h4: ema(h4.map((c) => c.close), 20),
     ema50h4: ema(h4.map((c) => c.close), 50),
@@ -179,16 +190,18 @@ export function evaluateAt(ctx: EngineContext, i: number, opts: EvaluateOptions)
   };
   if (Object.values(facts).some((v) => typeof v === "number" && Number.isNaN(v))) return none("indicators not ready");
 
-  const score = scoreSide(side, facts);
+  const label = TRIGGER_LABEL[ctx.timeframe];
+  const score = scoreSide(side, facts, label);
 
   // ---- reversal candle patterns (1H, and the 4H candle if it closed at the same moment): extra points, or a veto
   let reversalVeto: string | null = null;
   if (config.reversal?.enabled) {
     const inputs: ReversalInput[] = [
-      { label: "1H", candles: series.h1, i, atr: ctx.atr1[i]!, ema50: ctx.ema50h1[i]!, ema200: ctx.ema200h1[i]!, volRatio: ctx.volRatio1[i]! },
+      { label, candles: series.h1, i, atr: ctx.atr1[i]!, ema50: ctx.ema50h1[i]!, ema200: ctx.ema200h1[i]!, volRatio: ctx.volRatio1[i]! },
     ];
     const four = series.h4[j4];
-    if (four && four.time + H4_MS === candle.time + HOUR_MS) {
+    // the 4H candle is a second look only when it closed at this very moment and is not the trigger series itself
+    if (ctx.timeframe !== "4h" && four && four.time + H4_MS === candle.time + ctx.triggerMs) {
       inputs.push({ label: "4H", candles: series.h4, i: j4, atr: ctx.atr4[j4]!, ema50: ctx.ema50h4[j4]!, ema200: ctx.ema200h4[j4]!, volRatio: ctx.volRatio4[j4]! });
     }
     const reversal = assessReversal(side, inputs, pivots, config.reversal);
@@ -208,7 +221,7 @@ export function evaluateAt(ctx: EngineContext, i: number, opts: EvaluateOptions)
 
   // ---- veto rules: any one blocks the signal
   const atr1 = ctx.atr1[i]!;
-  if (Number.isNaN(atr1)) return none("1H ATR not ready");
+  if (Number.isNaN(atr1)) return none(`${label} ATR not ready`);
   if (reversalVeto) return none(reversalVeto);
   if (side === "BUY" && facts.rsi > 70) return none("veto: RSI above 70");
   if (side === "SELL" && facts.rsi < 30) return none("veto: RSI below 30");
@@ -228,17 +241,19 @@ export function evaluateAt(ctx: EngineContext, i: number, opts: EvaluateOptions)
     decimals,
     minRiskPercent: config.minRiskPercent,
     maxRiskPercent: config.maxRiskPercent,
+    stopBufferAtr: config.stopBufferAtr,
+    targetScale: config.targetScale,
   });
   if (!result.ok) return none(`levels rejected: ${result.reason}`);
   const lv = result.levels;
 
   const reasons = [`1D close ${side === "BUY" ? "above" : "below"} EMA200 (trend filter)`, ...score.reasons];
-  const createdAt = candle.time + HOUR_MS;
+  const createdAt = candle.time + ctx.triggerMs;
   const signal: Signal = {
     id: (opts.idFactory ?? randomUUID)(),
     symbol,
     side,
-    timeframe: "1h",
+    timeframe: ctx.timeframe,
     price: lv.entry,
     levels: { S1: pivots.S1, R2: pivots.R2, pivots },
     indicators: { emaFast: round(facts.ema20h4, decimals), emaSlow: round(facts.ema50h4, decimals), rsi: Math.round(facts.rsi * 10) / 10 },
